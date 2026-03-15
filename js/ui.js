@@ -874,6 +874,9 @@ function init(userId, isAdmin) {
             return;
         }
 
+        // Запоминаем, нужно ли генерировать название (это первое сообщение в чате)
+        const shouldAutoTitle = _state.messages.length === 0;
+
         try {
             // Process images: upload to Storage + get base64
             const imageDataForMessage = []; // for Firestore message attachments
@@ -964,7 +967,7 @@ function init(userId, isAdmin) {
                     }
 
                     // Auto-generate title if this is the first exchange
-                    if (_state.messages.length <= 1 && fullContent.trim()) {
+                    if (shouldAutoTitle && fullContent.trim()) {
                         _autoGenerateTitle(content || fullContent);
                     }
                 },
