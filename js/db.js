@@ -1,617 +1,577 @@
 /**
- * Chattura - Database (Firestore)
- * CRUD operations for workspaces, chats, messages, settings.
+ * Chattura — Firestore Database Layer
+ * CRUD operations for workspaces, chats, messages, settings, invite codes, user registry.
  * Real-time listeners with proper detachment.
  */
 
 const DB = (() => {
-    let db = null;
+    // ── Helpers ──
 
-    // Active listener unsubscribe functions
-    const listeners = {
-        workspaces: null,
-        chats: null,
-        messages: null,
-        settings: null
-    };
-
-    function init() {
-        db = firebase.firestore();
-        // Enable offline persistence
-        db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-            if (err.code === 'failed-precondition') {
-                console.warn('Firestore persistence failed: multiple tabs open');
-            } else if (err.code === 'unimplemented') {
-                console.warn('Firestore persistence not available in this browser');
-            }
-        });
-        return db;
+    function _db() {
+        return firebase.firestore();
     }
 
-    function getDb() {
-        if (!db) init();
-        return db;
+    function _userRef(userId) {
+        return _db().collection('users').doc(userId);
     }
 
-    // ─── References ───
-
-    function userRef(userId) {
-        return getDb().collection('users').doc(userId);
+    function _timestamp() {
+        return firebase.firestore.FieldValue.serverTimestamp();
     }
 
-    function settingsRef(userId) {
-        return userRef(userId).collection('settings').doc('config');
+    function _docData(doc) {
+        if (!doc.exists) return null;
+        return { id: doc.id, ...doc.data() };
     }
 
-    function workspacesCol(userId) {
-        return userRef(userId).collection('workspaces');
+    function _queryData(snapshot) {
+        const results = [];
+        snapshot.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
+        return results;
     }
 
-    function chatsCol(userId) {
-        return userRef(userId).collection('chats');
+    // ── Active Listeners Registry ──
+    // Stores unsubscribe functions keyed by listener name
+    const _listeners = {};
+
+    function _detach(key) {
+        if (_listeners[key]) {
+            _listeners[key]();
+            delete _listeners[key];
+        }
     }
 
-    function messagesCol(userId) {
-        return userRef(userId).collection('messages');
+    function detachAll() {
+        Object.keys(_listeners).forEach(key => _detach(key));
     }
 
-    // ─── App Settings (admin) ───
+    // ══════════════════════════════════════════════
+    //  APP SETTINGS
+    // ══════════════════════════════════════════════
 
     async function getAppSettings() {
-        const doc = await getDb().collection('app').doc('settings').get();
-        return doc.exists ? doc.data() : null;
+        const doc = await _db().collection('app').doc('settings').get();
+        return _docData(doc);
     }
 
-    async function setAppSettings(data) {
-        return getDb().collection('app').doc('settings').set(data, { merge: true });
+    async function setAdminUid(uid) {
+        await _db().collection('app').doc('settings').set({ adminUid: uid });
     }
 
-    // ─── User Registry ───
+    // ══════════════════════════════════════════════
+    //  USER SETTINGS
+    // ══════════════════════════════════════════════
 
-    async function setUserRegistry(userId, data) {
-        return getDb().collection('userRegistry').doc(userId).set(data, { merge: true });
+    async function getUserSettings(userId) {
+        const doc = await _userRef(userId).collection('settings').doc('config').get();
+        return _docData(doc);
     }
 
-    async function getUserRegistry(userId) {
-        const doc = await getDb().collection('userRegistry').doc(userId).get();
-        return doc.exists ? doc.data() : null;
+    async function saveUserSettings(userId, settings) {
+        await _userRef(userId).collection('settings').doc('config').set(settings, { merge: true });
+    }
+
+    // ══════════════════════════════════════════════
+    //  USER REGISTRY
+    // ══════════════════════════════════════════════
+
+    async function createUserRegistryEntry(userId, data) {
+        await _db().collection('userRegistry').doc(userId).set({
+            email: data.email || '',
+            displayName: data.displayName || '',
+            createdAt: _timestamp(),
+            lastLoginAt: _timestamp()
+        });
+    }
+
+    async function updateLastLogin(userId) {
+        await _db().collection('userRegistry').doc(userId).update({
+            lastLoginAt: _timestamp()
+        });
     }
 
     async function getAllUsers() {
-        const snapshot = await getDb().collection('userRegistry').get();
-        const users = [];
-        snapshot.forEach(doc => {
-            users.push({ id: doc.id, ...doc.data() });
+        const snapshot = await _db().collection('userRegistry').get();
+        return _queryData(snapshot);
+    }
+
+    async function deleteUserRegistryEntry(userId) {
+        await _db().collection('userRegistry').doc(userId).delete();
+    }
+
+    // ══════════════════════════════════════════════
+    //  INVITE CODES
+    // ══════════════════════════════════════════════
+
+    async function createInviteCode(code, maxUses) {
+        const ref = _db().collection('inviteCodes').doc();
+        await ref.set({
+            code: code,
+            maxUses: maxUses || 1,
+            usedCount: 0,
+            usedBy: [],
+            createdAt: _timestamp(),
+            active: true
         });
-        return users;
+        return ref.id;
     }
 
-    // ─── Invite Codes ───
-
-    async function createInviteCode(data) {
-        return getDb().collection('inviteCodes').add(data);
-    }
-
-    async function getInviteCodeByValue(code) {
-        const snapshot = await getDb().collection('inviteCodes')
+    async function findInviteByCode(code) {
+        const snapshot = await _db().collection('inviteCodes')
             .where('code', '==', code)
             .where('active', '==', true)
             .limit(1)
             .get();
-
         if (snapshot.empty) return null;
         const doc = snapshot.docs[0];
         return { id: doc.id, ...doc.data() };
     }
 
-    async function updateInviteCode(codeId, data) {
-        return getDb().collection('inviteCodes').doc(codeId).update(data);
-    }
-
-    async function deleteInviteCode(codeId) {
-        return getDb().collection('inviteCodes').doc(codeId).delete();
+    async function useInviteCode(codeId, userId) {
+        const ref = _db().collection('inviteCodes').doc(codeId);
+        await ref.update({
+            usedCount: firebase.firestore.FieldValue.increment(1),
+            usedBy: firebase.firestore.FieldValue.arrayUnion(userId)
+        });
+        // Deactivate if max uses reached
+        const doc = await ref.get();
+        const data = doc.data();
+        if (data.usedCount >= data.maxUses) {
+            await ref.update({ active: false });
+        }
     }
 
     async function getAllInviteCodes() {
-        const snapshot = await getDb().collection('inviteCodes')
+        const snapshot = await _db().collection('inviteCodes')
             .orderBy('createdAt', 'desc')
             .get();
-        const codes = [];
-        snapshot.forEach(doc => {
-            codes.push({ id: doc.id, ...doc.data() });
-        });
-        return codes;
+        return _queryData(snapshot);
     }
 
-    // ─── Settings ───
-
-    async function getSettings(userId) {
-        const doc = await settingsRef(userId).get();
-        return doc.exists ? doc.data() : null;
+    async function deactivateInviteCode(codeId) {
+        await _db().collection('inviteCodes').doc(codeId).update({ active: false });
     }
 
-    async function saveSettings(userId, data) {
-        return settingsRef(userId).set(data, { merge: true });
+    async function deleteInviteCode(codeId) {
+        await _db().collection('inviteCodes').doc(codeId).delete();
     }
 
-    function onSettingsChange(userId, callback) {
-        detachListener('settings');
-        listeners.settings = settingsRef(userId).onSnapshot(doc => {
-            callback(doc.exists ? doc.data() : null);
-        }, err => {
-            console.error('Settings listener error:', err);
-        });
-    }
-
-    // ─── Workspaces ───
+    // ══════════════════════════════════════════════
+    //  WORKSPACES
+    // ══════════════════════════════════════════════
 
     async function createWorkspace(userId, data) {
-        const ref = workspacesCol(userId).doc();
+        const ref = _userRef(userId).collection('workspaces').doc();
         const workspace = {
-            name: data.name || 'New Workspace',
+            name: data.name || 'Untitled',
             systemPrompt: data.systemPrompt || '',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            order: data.order || 0,
-            ...data,
-            // Ensure timestamps are server-side
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            createdAt: _timestamp(),
+            updatedAt: _timestamp(),
+            order: data.order ?? Date.now()
         };
         await ref.set(workspace);
         return ref.id;
     }
 
     async function updateWorkspace(userId, workspaceId, data) {
-        return workspacesCol(userId).doc(workspaceId).update({
-            ...data,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        const update = { ...data, updatedAt: _timestamp() };
+        await _userRef(userId).collection('workspaces').doc(workspaceId).update(update);
     }
 
     async function deleteWorkspace(userId, workspaceId) {
-        // Delete all chats in this workspace first
-        const chats = await chatsCol(userId)
-            .where('workspaceId', '==', workspaceId)
-            .get();
-
-        const batch = getDb().batch();
-
-        for (const chatDoc of chats.docs) {
-            // Delete all messages in this chat
-            const messages = await messagesCol(userId)
-                .where('chatId', '==', chatDoc.id)
+        // Delete all chats in this workspace (and their messages)
+        const chats = await getChatsByWorkspace(userId, workspaceId);
+        const batch = _db().batch();
+        for (const chat of chats) {
+            // Delete messages of each chat
+            const messagesSnap = await _userRef(userId).collection('messages')
+                .where('chatId', '==', chat.id)
                 .get();
-            messages.forEach(msgDoc => {
-                batch.delete(msgDoc.ref);
-            });
-            batch.delete(chatDoc.ref);
+            messagesSnap.forEach(doc => batch.delete(doc.ref));
+            // Delete the chat itself
+            batch.delete(_userRef(userId).collection('chats').doc(chat.id));
         }
-
-        batch.delete(workspacesCol(userId).doc(workspaceId));
-        return batch.commit();
+        // Delete the workspace
+        batch.delete(_userRef(userId).collection('workspaces').doc(workspaceId));
+        await batch.commit();
     }
 
     async function getWorkspace(userId, workspaceId) {
-        const doc = await workspacesCol(userId).doc(workspaceId).get();
-        return doc.exists ? { id: doc.id, ...doc.data() } : null;
+        const doc = await _userRef(userId).collection('workspaces').doc(workspaceId).get();
+        return _docData(doc);
     }
 
-    function onWorkspacesChange(userId, callback) {
-        detachListener('workspaces');
-        listeners.workspaces = workspacesCol(userId)
+    function onWorkspacesChanged(userId, callback) {
+        _detach('workspaces');
+        const unsubscribe = _userRef(userId).collection('workspaces')
             .orderBy('order', 'asc')
             .onSnapshot(snapshot => {
-                const workspaces = [];
-                snapshot.forEach(doc => {
-                    workspaces.push({ id: doc.id, ...doc.data() });
-                });
-                callback(workspaces);
-            }, err => {
-                console.error('Workspaces listener error:', err);
+                callback(_queryData(snapshot));
+            }, error => {
+                console.error('Workspaces listener error:', error);
             });
+        _listeners['workspaces'] = unsubscribe;
     }
 
-    // ─── Chats ───
+    // ══════════════════════════════════════════════
+    //  CHATS
+    // ══════════════════════════════════════════════
 
     async function createChat(userId, data) {
-        const ref = chatsCol(userId).doc();
+        const ref = _userRef(userId).collection('chats').doc();
         const chat = {
             workspaceId: data.workspaceId,
             name: data.name || 'New Chat',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            createdAt: _timestamp(),
+            updatedAt: _timestamp()
         };
         await ref.set(chat);
         return ref.id;
     }
 
     async function updateChat(userId, chatId, data) {
-        return chatsCol(userId).doc(chatId).update({
-            ...data,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        const update = { ...data, updatedAt: _timestamp() };
+        await _userRef(userId).collection('chats').doc(chatId).update(update);
     }
 
     async function deleteChat(userId, chatId) {
+        const batch = _db().batch();
         // Delete all messages in this chat
-        const messages = await messagesCol(userId)
+        const messagesSnap = await _userRef(userId).collection('messages')
             .where('chatId', '==', chatId)
             .get();
-
-        const batch = getDb().batch();
-        messages.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-        batch.delete(chatsCol(userId).doc(chatId));
-        return batch.commit();
+        messagesSnap.forEach(doc => batch.delete(doc.ref));
+        // Delete the chat
+        batch.delete(_userRef(userId).collection('chats').doc(chatId));
+        await batch.commit();
     }
 
     async function getChat(userId, chatId) {
-        const doc = await chatsCol(userId).doc(chatId).get();
-        return doc.exists ? { id: doc.id, ...doc.data() } : null;
+        const doc = await _userRef(userId).collection('chats').doc(chatId).get();
+        return _docData(doc);
     }
 
-    function onChatsChange(userId, workspaceId, callback) {
-        detachListener('chats');
-        listeners.chats = chatsCol(userId)
+    async function getChatsByWorkspace(userId, workspaceId) {
+        const snapshot = await _userRef(userId).collection('chats')
+            .where('workspaceId', '==', workspaceId)
+            .orderBy('updatedAt', 'desc')
+            .get();
+        return _queryData(snapshot);
+    }
+
+    function onChatsChanged(userId, workspaceId, callback) {
+        _detach('chats');
+        const unsubscribe = _userRef(userId).collection('chats')
             .where('workspaceId', '==', workspaceId)
             .orderBy('updatedAt', 'desc')
             .onSnapshot(snapshot => {
-                const chats = [];
-                snapshot.forEach(doc => {
-                    chats.push({ id: doc.id, ...doc.data() });
-                });
-                callback(chats);
-            }, err => {
-                console.error('Chats listener error:', err);
+                callback(_queryData(snapshot));
+            }, error => {
+                console.error('Chats listener error:', error);
             });
+        _listeners['chats'] = unsubscribe;
     }
 
-    // ─── Messages ───
+    // ══════════════════════════════════════════════
+    //  MESSAGES
+    // ══════════════════════════════════════════════
 
     async function addMessage(userId, data) {
-        const ref = messagesCol(userId).doc();
+        const ref = _userRef(userId).collection('messages').doc();
         const message = {
             chatId: data.chatId,
-            role: data.role, // 'user', 'assistant', 'system'
+            role: data.role, // 'user' | 'assistant' | 'system'
             content: data.content || '',
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            timestamp: _timestamp(),
             attachments: data.attachments || []
         };
         await ref.set(message);
+        // Touch chat updatedAt
+        await _userRef(userId).collection('chats').doc(data.chatId).update({
+            updatedAt: _timestamp()
+        });
         return ref.id;
     }
 
     async function updateMessage(userId, messageId, data) {
-        return messagesCol(userId).doc(messageId).update(data);
+        await _userRef(userId).collection('messages').doc(messageId).update(data);
     }
 
     async function deleteMessage(userId, messageId) {
-        return messagesCol(userId).doc(messageId).delete();
+        await _userRef(userId).collection('messages').doc(messageId).delete();
     }
 
     async function getMessage(userId, messageId) {
-        const doc = await messagesCol(userId).doc(messageId).get();
-        return doc.exists ? { id: doc.id, ...doc.data() } : null;
+        const doc = await _userRef(userId).collection('messages').doc(messageId).get();
+        return _docData(doc);
     }
 
     /**
-     * Delete messages after a given timestamp in a chat
-     * Used when editing a user message: delete everything after it
+     * Get messages for a chat with optional pagination.
+     * Returns { messages: [], lastDoc: DocumentSnapshot | null }
+     * Messages are returned in ascending timestamp order (oldest first).
      */
-    async function deleteMessagesAfter(userId, chatId, timestamp) {
-        const snapshot = await messagesCol(userId)
-            .where('chatId', '==', chatId)
-            .where('timestamp', '>', timestamp)
-            .get();
-
-        const batch = getDb().batch();
-        snapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-        return batch.commit();
-    }
-
-    /**
-     * Get messages for a chat with pagination
-     * Returns { messages, hasMore, lastDoc }
-     */
-    async function getMessages(userId, chatId, limit = APP_CONFIG.messagesPageSize, beforeDoc = null) {
-        let query = messagesCol(userId)
+    async function getMessages(userId, chatId, limit, startAfterDoc) {
+        let query = _userRef(userId).collection('messages')
             .where('chatId', '==', chatId)
             .orderBy('timestamp', 'desc')
-            .limit(limit);
+            .limit(limit || APP_CONFIG.messagesPageSize);
 
-        if (beforeDoc) {
-            query = query.startAfter(beforeDoc);
+        if (startAfterDoc) {
+            query = query.startAfter(startAfterDoc);
         }
 
         const snapshot = await query.get();
         const messages = [];
+        let lastDoc = null;
+
         snapshot.forEach(doc => {
             messages.push({ id: doc.id, ...doc.data() });
+            lastDoc = doc;
         });
 
-        // Reverse to get chronological order
+        // Reverse to get ascending order for display
         messages.reverse();
 
-        return {
-            messages,
-            hasMore: snapshot.docs.length === limit,
-            lastDoc: snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null
-        };
+        return { messages, lastDoc, hasMore: snapshot.size === (limit || APP_CONFIG.messagesPageSize) };
     }
 
     /**
-     * Get ALL messages for a chat (for building API context)
+     * Real-time listener for new messages in a chat.
+     * Only listens for messages after the latest known timestamp to avoid re-rendering all.
+     * For initial load, use getMessages() then attach this for live updates.
+     */
+    function onMessagesChanged(userId, chatId, callback) {
+        _detach('messages');
+        const unsubscribe = _userRef(userId).collection('messages')
+            .where('chatId', '==', chatId)
+            .orderBy('timestamp', 'asc')
+            .onSnapshot(snapshot => {
+                const messages = _queryData(snapshot);
+                callback(messages);
+            }, error => {
+                console.error('Messages listener error:', error);
+            });
+        _listeners['messages'] = unsubscribe;
+    }
+
+    /**
+     * Delete all messages after a given timestamp in a chat.
+     * Used when editing a user message (delete subsequent messages).
+     */
+    async function deleteMessagesAfter(userId, chatId, afterTimestamp) {
+        const snapshot = await _userRef(userId).collection('messages')
+            .where('chatId', '==', chatId)
+            .where('timestamp', '>', afterTimestamp)
+            .get();
+        const batch = _db().batch();
+        snapshot.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        return snapshot.size;
+    }
+
+    /**
+     * Get all messages for a chat (no pagination, for export).
      */
     async function getAllMessages(userId, chatId) {
-        const snapshot = await messagesCol(userId)
+        const snapshot = await _userRef(userId).collection('messages')
             .where('chatId', '==', chatId)
             .orderBy('timestamp', 'asc')
             .get();
+        return _queryData(snapshot);
+    }
 
-        const messages = [];
-        snapshot.forEach(doc => {
-            messages.push({ id: doc.id, ...doc.data() });
-        });
-        return messages;
+    // ══════════════════════════════════════════════
+    //  DATA MANAGEMENT (Export / Import / Delete All)
+    // ══════════════════════════════════════════════
+
+    /**
+     * Export all user data as a plain object.
+     */
+    async function exportAllData(userId) {
+        const settings = await getUserSettings(userId);
+
+        const workspacesSnap = await _userRef(userId).collection('workspaces')
+            .orderBy('order', 'asc').get();
+        const workspaces = _queryData(workspacesSnap);
+
+        const chatsSnap = await _userRef(userId).collection('chats')
+            .orderBy('updatedAt', 'desc').get();
+        const chats = _queryData(chatsSnap);
+
+        const messagesSnap = await _userRef(userId).collection('messages')
+            .orderBy('timestamp', 'asc').get();
+        const messages = _queryData(messagesSnap);
+
+        return {
+            exportedAt: new Date().toISOString(),
+            version: typeof APP_VERSION !== 'undefined' ? APP_VERSION : 'unknown',
+            settings: settings,
+            workspaces: workspaces,
+            chats: chats,
+            messages: messages
+        };
     }
 
     /**
-     * Real-time listener for messages in a chat (latest page only)
-     * Listens to the latest N messages ordered by timestamp
+     * Import data from a previously exported JSON object.
+     * Overwrites existing data.
      */
-    function onMessagesChange(userId, chatId, callback, limit = APP_CONFIG.messagesPageSize) {
-        detachListener('messages');
-        listeners.messages = messagesCol(userId)
-            .where('chatId', '==', chatId)
-            .orderBy('timestamp', 'asc')
-            .limitToLast(limit)
-            .onSnapshot(snapshot => {
-                const messages = [];
-                snapshot.forEach(doc => {
-                    messages.push({ id: doc.id, ...doc.data() });
-                });
-                callback(messages);
-            }, err => {
-                console.error('Messages listener error:', err);
-            });
-    }
+    async function importAllData(userId, data) {
+        // First, delete existing data
+        await deleteAllUserData(userId);
 
-    // ─── Data Export/Import ───
-
-    async function exportAllUserData(userId) {
-        const data = {
-            exportedAt: new Date().toISOString(),
-            version: APP_VERSION,
-            settings: null,
-            workspaces: [],
-            chats: [],
-            messages: []
-        };
-
-        // Settings
-        data.settings = await getSettings(userId);
-
-        // Workspaces
-        const wsSnapshot = await workspacesCol(userId).get();
-        wsSnapshot.forEach(doc => {
-            data.workspaces.push({ id: doc.id, ...doc.data() });
-        });
-
-        // Chats
-        const chatsSnapshot = await chatsCol(userId).get();
-        chatsSnapshot.forEach(doc => {
-            data.chats.push({ id: doc.id, ...doc.data() });
-        });
-
-        // Messages
-        const msgsSnapshot = await messagesCol(userId).get();
-        msgsSnapshot.forEach(doc => {
-            data.messages.push({ id: doc.id, ...doc.data() });
-        });
-
-        return data;
-    }
-
-    async function importUserData(userId, data) {
-        const batch = getDb().batch();
-
-        // Settings
+        // Import settings
         if (data.settings) {
-            batch.set(settingsRef(userId), data.settings, { merge: true });
+            const { id, ...settingsData } = data.settings;
+            await saveUserSettings(userId, settingsData);
         }
 
-        // Workspaces
-        if (data.workspaces) {
+        // Import workspaces
+        if (data.workspaces && data.workspaces.length) {
             for (const ws of data.workspaces) {
                 const { id, ...wsData } = ws;
-                const ref = id
-                    ? workspacesCol(userId).doc(id)
-                    : workspacesCol(userId).doc();
-                batch.set(ref, wsData);
+                // Convert timestamps if they are objects
+                wsData.createdAt = wsData.createdAt || _timestamp();
+                wsData.updatedAt = wsData.updatedAt || _timestamp();
+                await _userRef(userId).collection('workspaces').doc(id).set(wsData);
             }
         }
 
-        // Chats
-        if (data.chats) {
+        // Import chats
+        if (data.chats && data.chats.length) {
             for (const chat of data.chats) {
                 const { id, ...chatData } = chat;
-                const ref = id
-                    ? chatsCol(userId).doc(id)
-                    : chatsCol(userId).doc();
-                batch.set(ref, chatData);
+                chatData.createdAt = chatData.createdAt || _timestamp();
+                chatData.updatedAt = chatData.updatedAt || _timestamp();
+                await _userRef(userId).collection('chats').doc(id).set(chatData);
             }
         }
 
-        // Messages
-        if (data.messages) {
-            // Batch has a limit of 500 operations; split if needed
-            const allOps = [];
-            for (const msg of data.messages) {
-                const { id, ...msgData } = msg;
-                const ref = id
-                    ? messagesCol(userId).doc(id)
-                    : messagesCol(userId).doc();
-                allOps.push({ ref, data: msgData });
-            }
-
-            // Commit in chunks of 450 (leaving room for settings/workspaces/chats above)
-            // Actually we need a smarter approach since batch already has ops
-            // Let's commit the first batch, then do messages in separate batches
-        }
-
-        // Commit non-message data first
-        await batch.commit();
-
-        // Now commit messages in batches of 500
-        if (data.messages && data.messages.length > 0) {
-            const chunks = [];
-            for (let i = 0; i < data.messages.length; i += 500) {
-                chunks.push(data.messages.slice(i, i + 500));
-            }
-            for (const chunk of chunks) {
-                const msgBatch = getDb().batch();
+        // Import messages
+        if (data.messages && data.messages.length) {
+            // Batch in groups of 500 (Firestore limit)
+            const batchSize = 450; // some margin
+            for (let i = 0; i < data.messages.length; i += batchSize) {
+                const batch = _db().batch();
+                const chunk = data.messages.slice(i, i + batchSize);
                 for (const msg of chunk) {
                     const { id, ...msgData } = msg;
-                    const ref = id
-                        ? messagesCol(userId).doc(id)
-                        : messagesCol(userId).doc();
-                    msgBatch.set(ref, msgData);
+                    msgData.timestamp = msgData.timestamp || _timestamp();
+                    const ref = _userRef(userId).collection('messages').doc(id);
+                    batch.set(ref, msgData);
                 }
-                await msgBatch.commit();
+                await batch.commit();
             }
         }
-    }
-
-    async function deleteAllUserData(userId) {
-        // Delete messages
-        const msgsSnapshot = await messagesCol(userId).get();
-        await deleteDocs(msgsSnapshot.docs);
-
-        // Delete chats
-        const chatsSnapshot = await chatsCol(userId).get();
-        await deleteDocs(chatsSnapshot.docs);
-
-        // Delete workspaces
-        const wsSnapshot = await workspacesCol(userId).get();
-        await deleteDocs(wsSnapshot.docs);
-
-        // Delete settings
-        await settingsRef(userId).delete();
     }
 
     /**
-     * Delete a batch of document refs (handles >500 limit)
+     * Delete all user Firestore data (settings, workspaces, chats, messages).
      */
-    async function deleteDocs(docs) {
-        const chunks = [];
-        for (let i = 0; i < docs.length; i += 500) {
-            chunks.push(docs.slice(i, i + 500));
-        }
-        for (const chunk of chunks) {
-            const batch = getDb().batch();
-            chunk.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
-        }
-    }
+    async function deleteAllUserData(userId) {
+        const collections = ['settings', 'workspaces', 'chats', 'messages'];
 
-    // ─── Delete user data for admin ───
+        for (const colName of collections) {
+            const colRef = _userRef(userId).collection(colName);
+            let snapshot = await colRef.limit(450).get();
 
-    async function deleteUserDataByAdmin(userId) {
-        await deleteAllUserData(userId);
-        // Delete user registry entry
-        await getDb().collection('userRegistry').doc(userId).delete();
-    }
-
-    // ─── Listener Management ───
-
-    function detachListener(name) {
-        if (listeners[name]) {
-            listeners[name]();
-            listeners[name] = null;
+            while (!snapshot.empty) {
+                const batch = _db().batch();
+                snapshot.forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
+                snapshot = await colRef.limit(450).get();
+            }
         }
     }
 
-    function detachAllListeners() {
-        Object.keys(listeners).forEach(key => {
-            detachListener(key);
+    // ══════════════════════════════════════════════
+    //  ADMIN: Delete specific user's data
+    // ══════════════════════════════════════════════
+
+    async function deleteUserDataByAdmin(targetUserId) {
+        await deleteAllUserData(targetUserId);
+        await deleteUserRegistryEntry(targetUserId);
+    }
+
+    // ══════════════════════════════════════════════
+    //  FIRESTORE OFFLINE PERSISTENCE
+    // ══════════════════════════════════════════════
+
+    function enablePersistence() {
+        _db().enablePersistence({ synchronizeTabs: true }).catch(err => {
+            if (err.code === 'failed-precondition') {
+                console.warn('Firestore persistence failed: multiple tabs open.');
+            } else if (err.code === 'unimplemented') {
+                console.warn('Firestore persistence not supported in this browser.');
+            }
         });
     }
 
-    // ─── Timestamps helper ───
-
-    function serverTimestamp() {
-        return firebase.firestore.FieldValue.serverTimestamp();
-    }
-
-    function arrayUnion(...elements) {
-        return firebase.firestore.FieldValue.arrayUnion(...elements);
-    }
+    // ══════════════════════════════════════════════
+    //  PUBLIC API
+    // ══════════════════════════════════════════════
 
     return {
-        init,
-        getDb,
+        // Persistence
+        enablePersistence,
+
+        // Listeners
+        detachAll,
 
         // App settings
         getAppSettings,
-        setAppSettings,
+        setAdminUid,
+
+        // User settings
+        getUserSettings,
+        saveUserSettings,
 
         // User registry
-        setUserRegistry,
-        getUserRegistry,
+        createUserRegistryEntry,
+        updateLastLogin,
         getAllUsers,
+        deleteUserRegistryEntry,
 
         // Invite codes
         createInviteCode,
-        getInviteCodeByValue,
-        updateInviteCode,
-        deleteInviteCode,
+        findInviteByCode,
+        useInviteCode,
         getAllInviteCodes,
-
-        // Settings
-        getSettings,
-        saveSettings,
-        onSettingsChange,
+        deactivateInviteCode,
+        deleteInviteCode,
 
         // Workspaces
         createWorkspace,
         updateWorkspace,
         deleteWorkspace,
         getWorkspace,
-        onWorkspacesChange,
+        onWorkspacesChanged,
 
         // Chats
         createChat,
         updateChat,
         deleteChat,
         getChat,
-        onChatsChange,
+        getChatsByWorkspace,
+        onChatsChanged,
 
         // Messages
         addMessage,
         updateMessage,
         deleteMessage,
         getMessage,
-        deleteMessagesAfter,
         getMessages,
         getAllMessages,
-        onMessagesChange,
+        onMessagesChanged,
+        deleteMessagesAfter,
 
         // Data management
-        exportAllUserData,
-        importUserData,
+        exportAllData,
+        importAllData,
         deleteAllUserData,
-        deleteUserDataByAdmin,
 
-        // Listener management
-        detachListener,
-        detachAllListeners,
-
-        // Helpers
-        serverTimestamp,
-        arrayUnion
+        // Admin
+        deleteUserDataByAdmin
     };
 })();
