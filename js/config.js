@@ -4,7 +4,7 @@
  * Firebase config is NOT secret — security comes from Auth + Firestore/Storage Rules.
  */
 
-const APP_VERSION = "260315.15";
+const APP_VERSION = "260315.16";
 
 const FIREBASE_CONFIG = {
     apiKey: "AIzaSyCPoRk-bX6XRnDZxhN-0WMV39bY8Tewjns",
