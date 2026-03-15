@@ -76,7 +76,6 @@ const UI = (() => {
             messagesList: _el('messages-list'),
             loadEarlierWrapper: _el('load-earlier-wrapper'),
             loadEarlierBtn: _el('load-earlier-btn'),
-            typingIndicator: _el('typing-indicator'),
 
             // Input
             chatInputArea: _el('chat-input-area'),
@@ -807,34 +806,47 @@ function init(userId, isAdmin) {
     //  STREAMING RENDERING
     // ══════════════════════════════════════════════
 
-    function _showStreamingMessage() {
-        // Create a placeholder assistant message
-        const div = document.createElement('div');
-        div.classList.add('message', 'message-assistant');
-        div.dataset.id = '__streaming__';
+function _showStreamingMessage() {
+    const div = document.createElement('div');
+    div.classList.add('message', 'message-assistant');
+    div.dataset.id = '__streaming__';
 
-        const contentDiv = document.createElement('div');
-        contentDiv.classList.add('message-content');
-        contentDiv.innerHTML = '<span class="streaming-cursor">▊</span>';
+    const contentDiv = document.createElement('div');
+    contentDiv.classList.add('message-content');
+    contentDiv.innerHTML = '<span class="streaming-cursor">▊</span>';
 
-        div.appendChild(contentDiv);
-        DOM.messagesList.appendChild(div);
-        _scrollToBottom();
-    }
+    div.appendChild(contentDiv);
+    DOM.messagesList.appendChild(div);
 
-    function _updateStreamingMessage(content) {
-        const el = DOM.messagesList.querySelector('[data-id="__streaming__"]');
-        if (!el) return;
+    // Typing indicator сразу под сообщением
+    const indicator = document.createElement('div');
+    indicator.classList.add('typing-indicator');
+    indicator.id = 'typing-indicator-inline';
+    indicator.innerHTML = `
+        <div class="typing-avatar">AI</div>
+        <div class="typing-dots"><span></span><span></span><span></span></div>
+    `;
+    DOM.messagesList.appendChild(indicator);
 
-        const contentDiv = el.querySelector('.message-content');
-        contentDiv.innerHTML = Markdown.render(content) + '<span class="streaming-cursor">▊</span>';
-        _scrollToBottom();
-    }
+    _scrollToBottom();
+}
 
-    function _removeStreamingMessage() {
-        const el = DOM.messagesList.querySelector('[data-id="__streaming__"]');
-        if (el) el.remove();
-    }
+function _updateStreamingMessage(content) {
+    const el = DOM.messagesList.querySelector('[data-id="__streaming__"]');
+    if (!el) return;
+
+    const contentDiv = el.querySelector('.message-content');
+    contentDiv.innerHTML = Markdown.render(content) + '<span class="streaming-cursor">▊</span>';
+    _scrollToBottom();
+}
+
+function _removeStreamingMessage() {
+    const el = DOM.messagesList.querySelector('[data-id="__streaming__"]');
+    if (el) el.remove();
+
+    const indicator = document.getElementById('typing-indicator-inline');
+    if (indicator) indicator.remove();
+}
 
     // ══════════════════════════════════════════════
     //  SEND MESSAGE
@@ -935,8 +947,6 @@ function init(userId, isAdmin) {
             _updateSendStopButtons();
             _showStreamingMessage();
 
-            DOM.typingIndicator.classList.remove('hidden');
-
             API.streamChat({
                 apiKey: _state.settings.apiKey,
                 model: _state.settings.currentModel,
@@ -952,7 +962,6 @@ function init(userId, isAdmin) {
                     _updateStreamingMessage(full);
                 },
                 onComplete: async (fullContent, usage) => {
-                    DOM.typingIndicator.classList.add('hidden');
                     _removeStreamingMessage();
                     _state.isStreaming = false;
                     _updateSendStopButtons();
@@ -972,7 +981,6 @@ function init(userId, isAdmin) {
                     }
                 },
                 onError: async (error, partialContent) => {
-                    DOM.typingIndicator.classList.add('hidden');
                     _removeStreamingMessage();
                     _state.isStreaming = false;
                     _updateSendStopButtons();
@@ -997,7 +1005,6 @@ function init(userId, isAdmin) {
             console.error('Send error:', error);
             _state.isStreaming = false;
             _updateSendStopButtons();
-            DOM.typingIndicator.classList.add('hidden');
             showToast('Failed to send message: ' + error.message, 'error');
         }
     }
@@ -1006,7 +1013,6 @@ function init(userId, isAdmin) {
         API.abortStream();
         _state.isStreaming = false;
         _updateSendStopButtons();
-        DOM.typingIndicator.classList.add('hidden');
     }
 
     function _updateSendStopButtons() {
@@ -1138,7 +1144,6 @@ function init(userId, isAdmin) {
         _state.streamingContent = '';
         _updateSendStopButtons();
         _showStreamingMessage();
-        DOM.typingIndicator.classList.remove('hidden');
 
         API.streamChat({
             apiKey: _state.settings.apiKey,
@@ -1155,7 +1160,6 @@ function init(userId, isAdmin) {
                 _updateStreamingMessage(full);
             },
             onComplete: async (fullContent) => {
-                DOM.typingIndicator.classList.add('hidden');
                 _removeStreamingMessage();
                 _state.isStreaming = false;
                 _updateSendStopButtons();
@@ -1169,7 +1173,6 @@ function init(userId, isAdmin) {
                 }
             },
             onError: async (error, partialContent) => {
-                DOM.typingIndicator.classList.add('hidden');
                 _removeStreamingMessage();
                 _state.isStreaming = false;
                 _updateSendStopButtons();
@@ -1235,7 +1238,6 @@ function init(userId, isAdmin) {
             _state.streamingContent = '';
             _updateSendStopButtons();
             _showStreamingMessage();
-            DOM.typingIndicator.classList.remove('hidden');
 
             API.streamChat({
                 apiKey: _state.settings.apiKey,
@@ -1252,7 +1254,6 @@ function init(userId, isAdmin) {
                     _updateStreamingMessage(full);
                 },
                 onComplete: async (fullContent) => {
-                    DOM.typingIndicator.classList.add('hidden');
                     _removeStreamingMessage();
                     _state.isStreaming = false;
                     _updateSendStopButtons();
@@ -1266,7 +1267,6 @@ function init(userId, isAdmin) {
                     }
                 },
                 onError: async (error, partialContent) => {
-                    DOM.typingIndicator.classList.add('hidden');
                     _removeStreamingMessage();
                     _state.isStreaming = false;
                     _updateSendStopButtons();
