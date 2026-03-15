@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chattura</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+</head>
+<body class="theme-dark">
+
+    <!-- ==================== AUTH SCREEN ==================== -->
+    <div id="auth-screen" class="screen">
+        <div class="auth-container">
+            <div class="auth-logo">
+                <span class="auth-logo-icon">💬</span>
+                <h1>Chattura</h1>
+                <p class="auth-subtitle">Multi-model AI Chat</p>
+            </div>
+
+            <div id="auth-error" class="auth-error hidden"></div>
+
+            <!-- Login Form -->
+            <form id="login-form" class="auth-form">
+                <h2>Sign In</h2>
+                <div class="form-group">
+                    <label for="login-email">Email</label>
+                    <input type="email" id="login-email" required autocomplete="email" placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" required autocomplete="current-password" placeholder="Password">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full" id="login-btn">
+                    <span class="btn-text">Sign In</span>
+                    <span class="btn-loader hidden"></span>
+                </button>
+                <p class="auth-switch">Don't have an account? <a href="#" id="show-register">Register</a></p>
+            </form>
+
+            <!-- Register Form -->
+            <form id="register-form" class="auth-form hidden">
+                <h2>Create Account</h2>
+                <div class="form-group">
+                    <label for="register-email">Email</label>
+                    <input type="email" id="register-email" required autocomplete="email" placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label for="register-display-name">Display Name</label>
+                    <input type="text" id="register-display-name" required autocomplete="name" placeholder="Your Name">
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Password</label>
+                    <input type="password" id="register-password" required autocomplete="new-password" placeholder="Min 6 characters" minlength="6">
+                </div>
+                <div class="form-group" id="invite-code-group" style="display:none;">
+                    <label for="register-invite-code">Invite Code</label>
+                    <input type="text" id="register-invite-code" placeholder="Enter invite code" autocomplete="off">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full" id="register-btn">
+                    <span class="btn-text">Create Account</span>
+                    <span class="btn-loader hidden"></span>
+                </button>
+                <p class="auth-switch">Already have an account? <a href="#" id="show-login">Sign In</a></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== LOADING SCREEN ==================== -->
+    <div id="loading-screen" class="screen hidden">
+        <div class="loading-container">
+            <span class="loading-icon">💬</span>
+            <div class="loading-spinner"></div>
+            <p>Loading Chattura...</p>
+        </div>
+    </div>
+
+    <!-- ==================== MAIN APP ==================== -->
+    <div id="app-screen" class="screen hidden">
+
+        <!-- Top Bar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <button id="sidebar-toggle" class="btn-icon" aria-label="Toggle sidebar">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
+                <span class="topbar-title">Chattura</span>
+            </div>
+            <div class="topbar-center">
+                <span id="current-workspace-name" class="topbar-workspace"></span>
+                <span class="topbar-separator">·</span>
+                <div class="model-selector">
+                    <select id="model-select" title="Select model">
+                        <option value="">No model</option>
+                    </select>
+                </div>
+            </div>
+            <div class="topbar-right">
+                <button id="settings-btn" class="btn-icon" aria-label="Settings">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Offline Banner -->
+        <div id="offline-banner" class="offline-banner hidden">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            <span>Offline. Data will sync when reconnected.</span>
+        </div>
+
+        <!-- API Key Banner -->
+        <div id="apikey-banner" class="apikey-banner hidden">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            <span>Please set your OpenRouter API key in <a href="#" id="apikey-banner-link">Settings</a> to start chatting.</span>
+        </div>
+
+        <div class="app-body">
+            <!-- Sidebar Overlay (mobile) -->
+            <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
+
+            <!-- Sidebar -->
+            <aside id="sidebar" class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-header">
+                        <h3>Workspaces</h3>
+                        <button id="add-workspace-btn" class="btn-icon-sm" title="New workspace">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        </button>
+                    </div>
+                    <ul id="workspace-list" class="sidebar-list"></ul>
+                </div>
+
+                <div class="sidebar-divider"></div>
+
+                <div class="sidebar-section sidebar-section-grow">
+                    <div class="sidebar-section-header">
+                        <h3>Chats</h3>
+                        <button id="add-chat-btn" class="btn-icon-sm" title="New chat (Ctrl+K)">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        </button>
+                    </div>
+                    <ul id="chat-list" class="sidebar-list"></ul>
+                </div>
+            </aside>
+
+            <!-- Main Chat Area -->
+            <main class="chat-area">
+                <!-- Welcome / Empty State -->
+                <div id="chat-welcome" class="chat-welcome">
+                    <div class="chat-welcome-inner">
+                        <span class="chat-welcome-icon">💬</span>
+                        <h2>Welcome to Chattura</h2>
+                        <p>Select a chat or create a new one to start a conversation.</p>
+                    </div>
+                </div>
+
+                <!-- Messages Container -->
+                <div id="messages-container" class="messages-container hidden">
+                    <div id="load-earlier-wrapper" class="load-earlier-wrapper hidden">
+                        <button id="load-earlier-btn" class="btn btn-secondary btn-sm">Load earlier messages</button>
+                    </div>
+                    <div id="messages-list" class="messages-list"></div>
+                    <div id="typing-indicator" class="typing-indicator hidden">
+                        <div class="typing-avatar">AI</div>
+                        <div class="typing-dots"><span></span><span></span><span></span></div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div id="chat-input-area" class="chat-input-area hidden">
+                    <div id="attachments-preview" class="attachments-preview hidden"></div>
+                    <div class="chat-input-row">
+                        <button id="attach-btn" class="btn-icon" title="Attach file">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        </button>
+                        <textarea id="message-input" placeholder="Type a message..." rows="1"></textarea>
+                        <button id="send-btn" class="btn-icon btn-send" title="Send (Enter)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        </button>
+                        <button id="stop-btn" class="btn-icon btn-stop hidden" title="Stop generation">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                        </button>
+                    </div>
+                    <input type="file" id="file-input" multiple hidden>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- ==================== SETTINGS MODAL ==================== -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="modal-close btn-icon" aria-label="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body settings-body">
+                <nav class="settings-nav">
+                    <button class="settings-nav-item active" data-tab="api">API</button>
+                    <button class="settings-nav-item" data-tab="models">Models</button>
+                    <button class="settings-nav-item" data-tab="generation">Generation</button>
+                    <button class="settings-nav-item" data-tab="appearance">Appearance</button>
+                    <button class="settings-nav-item" data-tab="account">Account</button>
+                    <button class="settings-nav-item" data-tab="data">Data</button>
+                    <button class="settings-nav-item hidden" data-tab="admin" id="admin-nav-item">Admin</button>
+                </nav>
+                <div class="settings-panels">
+                    <!-- API Tab -->
+                    <div class="settings-panel active" data-panel="api">
+                        <h3>OpenRouter API Key</h3>
+                        <p class="settings-hint">Your API key is stored securely in your personal Firestore space. Only you can access it.</p>
+                        <div class="form-group">
+                            <input type="password" id="settings-api-key" placeholder="sk-or-v1-..." autocomplete="off">
+                            <div class="form-group-actions">
+                                <button class="btn btn-sm btn-secondary" id="toggle-apikey-visibility">Show</button>
+                                <button class="btn btn-sm btn-primary" id="save-api-key">Save</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Models Tab -->
+                    <div class="settings-panel" data-panel="models">
+                        <h3>Current Model</h3>
+                        <div class="form-group">
+                            <input type="text" id="settings-current-model" placeholder="e.g. anthropic/claude-sonnet-4">
+                            <button class="btn btn-sm btn-primary" id="save-current-model">Save</button>
+                        </div>
+
+                        <h3>Favorite Models</h3>
+                        <p class="settings-hint">These appear in the quick-switch dropdown in the chat header.</p>
+                        <div id="favorite-models-list" class="favorite-models-list"></div>
+                        <div class="form-row">
+                            <input type="text" id="new-fav-model-id" placeholder="Model ID (e.g. openai/gpt-4o)">
+                            <input type="text" id="new-fav-model-name" placeholder="Display name (optional)">
+                            <button class="btn btn-sm btn-primary" id="add-fav-model">Add</button>
+                        </div>
+                    </div>
+
+                    <!-- Generation Tab -->
+                    <div class="settings-panel" data-panel="generation">
+                        <h3>Generation Parameters</h3>
+                        <div class="form-group">
+                            <label>Temperature: <span id="temp-value">0.7</span></label>
+                            <input type="range" id="settings-temperature" min="0" max="2" step="0.1" value="0.7">
+                        </div>
+                        <div class="form-group">
+                            <label>Max Tokens</label>
+                            <input type="number" id="settings-max-tokens" value="4096" min="1" max="200000">
+                        </div>
+                        <div class="form-group">
+                            <label>Top-P: <span id="topp-value">0.95</span></label>
+                            <input type="range" id="settings-top-p" min="0" max="1" step="0.05" value="0.95">
+                        </div>
+                    </div>
+
+                    <!-- Appearance Tab -->
+                    <div class="settings-panel" data-panel="appearance">
+                        <h3>Theme</h3>
+                        <div class="theme-toggle-group">
+                            <button class="btn btn-sm" id="theme-dark-btn">Dark</button>
+                            <button class="btn btn-sm" id="theme-light-btn">Light</button>
+                        </div>
+                    </div>
+
+                    <!-- Account Tab -->
+                    <div class="settings-panel" data-panel="account">
+                        <h3>Account</h3>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <p id="account-email" class="account-info-value"></p>
+                        </div>
+                        <div class="form-group">
+                            <label>Display Name</label>
+                            <p id="account-display-name" class="account-info-value"></p>
+                        </div>
+                        <button class="btn btn-danger" id="sign-out-btn">Sign Out</button>
+                    </div>
+
+                    <!-- Data Tab -->
+                    <div class="settings-panel" data-panel="data">
+                        <h3>Data Management</h3>
+                        <div class="data-actions">
+                            <button class="btn btn-secondary" id="export-data-btn">Export My Data (JSON)</button>
+                            <label class="btn btn-secondary">
+                                Import Data (JSON)
+                                <input type="file" id="import-data-input" accept=".json" hidden>
+                            </label>
+                            <button class="btn btn-danger" id="delete-all-data-btn">Delete All My Data</button>
+                        </div>
+                    </div>
+
+                    <!-- Admin Tab -->
+                    <div class="settings-panel" data-panel="admin">
+                        <h3>Invite Codes</h3>
+                        <div class="form-row">
+                            <input type="number" id="invite-max-uses" value="1" min="1" placeholder="Max uses">
+                            <button class="btn btn-primary" id="generate-invite-btn">Generate Invite Code</button>
+                        </div>
+                        <div id="invite-codes-list" class="admin-list"></div>
+
+                        <h3>User Management</h3>
+                        <div id="users-list" class="admin-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== WORKSPACE MODAL ==================== -->
+    <div id="workspace-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="workspace-modal-title">New Workspace</h2>
+                <button class="modal-close btn-icon" aria-label="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="workspace-name-input">Name</label>
+                    <input type="text" id="workspace-name-input" placeholder="Workspace name" required>
+                </div>
+                <div class="form-group">
+                    <label for="workspace-prompt-input">System Prompt</label>
+                    <textarea id="workspace-prompt-input" rows="5" placeholder="Instructions for the AI in this workspace (optional)"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="workspace-save-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== RENAME MODAL ==================== -->
+    <div id="rename-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2 id="rename-modal-title">Rename</h2>
+                <button class="modal-close btn-icon" aria-label="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <input type="text" id="rename-input" placeholder="New name" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel">Cancel</button>
+                <button class="btn btn-primary" id="rename-save-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== CONFIRM MODAL ==================== -->
+    <div id="confirm-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2 id="confirm-modal-title">Confirm</h2>
+                <button class="modal-close btn-icon" aria-label="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-modal-message"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel">Cancel</button>
+                <button class="btn btn-danger" id="confirm-modal-ok">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== CONTEXT MENU ==================== -->
+    <div id="context-menu" class="context-menu hidden">
+        <ul id="context-menu-items"></ul>
+    </div>
+
+    <!-- ==================== TOAST CONTAINER ==================== -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- ==================== SCRIPTS ==================== -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3/build/pdf.min.js"></script>
+
+    <script src="js/config.js"></script>
+    <script src="js/markdown.js"></script>
+    <script src="js/file-handler.js"></script>
+    <script src="js/db.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/admin.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
