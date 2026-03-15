@@ -1,19 +1,18 @@
 /**
  * Chattura - Configuration
  * 
- * Paste your Firebase config here.
  * Firebase config is NOT secret — security comes from Auth + Firestore/Storage Rules.
  */
 
-const APP_VERSION = "260315.10";
+const APP_VERSION = "260315.11";
 
 const FIREBASE_CONFIG = {
-    apiKey: "YOUR_API_KEY_HERE",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyCPoRk-bX6XRnDZxhN-0WMV39bY8Tewjns",
+    authDomain: "chattura-eab50.firebaseapp.com",
+    projectId: "chattura-eab50",
+    storageBucket: "chattura-eab50.firebasestorage.app",
+    messagingSenderId: "391316270257",
+    appId: "1:391316270257:web:32da95c2a3402bcc5e4690"
 };
 
 const APP_CONFIG = {
