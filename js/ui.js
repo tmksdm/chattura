@@ -28,7 +28,8 @@ const UI = (() => {
         hasMoreMessages: false,
         sidebarOpen: false,
         settingsDebounceTimer: null,
-        isMobile: window.innerWidth < 768
+        isMobile: window.innerWidth < 768,
+        eventsBound: false        
     };
 
     // ══════════════════════════════════════════════
@@ -145,22 +146,26 @@ const UI = (() => {
     //  INITIALIZATION
     // ══════════════════════════════════════════════
 
-    function init(userId, isAdmin) {
-        _cacheDom();
-        _state.userId = userId;
-        _state.isAdmin = isAdmin;
+function init(userId, isAdmin) {
+    _cacheDom();
+    _state.userId = userId;
+    _state.isAdmin = isAdmin;
 
+    if (!_state.eventsBound) {
         _bindEvents();
         _bindKeyboardShortcuts();
         _setupTextareaAutoResize();
         _setupDragAndDrop();
         _setupOnlineOffline();
-
-        // Show admin tab if admin
-        if (isAdmin && DOM.adminNavItem) {
-            DOM.adminNavItem.classList.remove('hidden');
-        }
+        _state.eventsBound = true;
     }
+
+    if (isAdmin && DOM.adminNavItem) {
+        DOM.adminNavItem.classList.remove('hidden');
+    } else if (DOM.adminNavItem) {
+        DOM.adminNavItem.classList.add('hidden');
+    }
+}
 
     // ══════════════════════════════════════════════
     //  EVENT BINDING
@@ -2085,26 +2090,49 @@ const UI = (() => {
     //  CLEANUP (for sign-out)
     // ══════════════════════════════════════════════
 
-    function cleanup() {
-        _state.userId = null;
-        _state.isAdmin = false;
-        _state.settings = null;
-        _state.workspaces = [];
-        _state.chats = [];
-        _state.currentWorkspaceId = null;
-        _state.currentChatId = null;
-        _state.messages = [];
-        _state.pendingAttachments = [];
-        _state.isStreaming = false;
-        _state.streamingMessageId = null;
-        _state.streamingContent = '';
+function cleanup() {
+    // Сброс состояния
+    _state.userId = null;
+    _state.isAdmin = false;
+    _state.settings = null;
+    _state.workspaces = [];
+    _state.chats = [];
+    _state.currentWorkspaceId = null;
+    _state.currentChatId = null;
+    _state.messages = [];
+    _state.pendingAttachments = [];
+    _state.isStreaming = false;
+    _state.streamingMessageId = null;
+    _state.streamingContent = '';
+    _state.editingMessageId = null;
+    _state.lastPaginationDoc = null;
+    _state.hasMoreMessages = false;
+    _state.sidebarOpen = false;
+    // НЕ сбрасываем _state.eventsBound!
 
-        if (DOM.messagesList) DOM.messagesList.innerHTML = '';
-        if (DOM.workspaceList) DOM.workspaceList.innerHTML = '';
-        if (DOM.chatList) DOM.chatList.innerHTML = '';
-
-        _clearAttachments();
+    if (_state.settingsDebounceTimer) {
+        clearTimeout(_state.settingsDebounceTimer);
+        _state.settingsDebounceTimer = null;
     }
+
+    // Очистить DOM
+    if (DOM.workspaceList) DOM.workspaceList.innerHTML = '';
+    if (DOM.chatList) DOM.chatList.innerHTML = '';
+    if (DOM.messagesList) DOM.messagesList.innerHTML = '';
+    if (DOM.currentWorkspaceName) DOM.currentWorkspaceName.textContent = '';
+
+    // Скрыть элементы
+    if (DOM.chatWelcome) DOM.chatWelcome.classList.remove('hidden');
+    if (DOM.messagesContainer) DOM.messagesContainer.classList.add('hidden');
+    if (DOM.chatInputArea) DOM.chatInputArea.classList.add('hidden');
+    if (DOM.offlineBanner) DOM.offlineBanner.classList.add('hidden');
+    if (DOM.apikeyBanner) DOM.apikeyBanner.classList.add('hidden');
+    if (DOM.typingIndicator) DOM.typingIndicator.classList.add('hidden');
+
+    // Закрыть sidebar
+    if (DOM.sidebar) DOM.sidebar.classList.remove('open');
+    if (DOM.sidebarOverlay) DOM.sidebarOverlay.classList.add('hidden');
+}
 
     // ══════════════════════════════════════════════
     //  PUBLIC API

@@ -1,191 +1,144 @@
 /**
  * Chattura — Application Entry Point
- * Initializes Firebase, manages auth state, wires up auth forms,
- * bootstraps the UI when a user is authenticated.
- *
- * v260315.10
+ * v260315.12
  */
 
 const App = (() => {
-
-    // ══════════════════════════════════════════════
-    //  STATE
-    // ══════════════════════════════════════════════
 
     const _state = {
         initialized: false,
         currentUser: null,
         isAdmin: false,
         authUnsubscribe: null,
-        initialWorkspaceSelected: false
+        initialWorkspaceSelected: false,
+        bootstrapping: false
     };
-
-    // ══════════════════════════════════════════════
-    //  DOM HELPERS
-    // ══════════════════════════════════════════════
 
     function _el(id) { return document.getElementById(id); }
 
-    // ══════════════════════════════════════════════
-    //  INITIALIZATION
-    // ══════════════════════════════════════════════
-
-    /**
-     * Main entry point. Called on DOMContentLoaded.
-     * 1. Initialize Firebase
-     * 2. Enable Firestore persistence
-     * 3. Set auth persistence
-     * 4. Bind auth form handlers
-     * 5. Listen for auth state changes
-     */
     async function init() {
         if (_state.initialized) return;
         _state.initialized = true;
 
         try {
-            // Step 1: Initialize Firebase
             firebase.initializeApp(FIREBASE_CONFIG);
-
-            // Step 2: Enable Firestore offline persistence
             DB.enablePersistence();
-
-            // Step 3: Set auth persistence to LOCAL
             await Auth.setPersistence();
-
-            // Step 4: Bind auth form event handlers
             _bindAuthForms();
-
-            // Step 5: Listen for auth state changes
             _state.authUnsubscribe = Auth.onAuthStateChanged(_handleAuthStateChanged);
-
         } catch (error) {
             console.error('App initialization failed:', error);
             _showAuthError('Application failed to initialize. Please refresh the page.');
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  AUTH STATE HANDLER
-    // ══════════════════════════════════════════════
-
-    /**
-     * Called whenever the auth state changes (login, logout, page load).
-     * @param {firebase.User|null} user
-     */
     async function _handleAuthStateChanged(user) {
         if (user) {
-            // User is signed in → bootstrap the app
             await _bootstrapApp(user);
         } else {
-            // No user → show auth screen
             _teardownApp();
             _showScreen('auth');
             _checkFirstUserForRegistration();
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  APP BOOTSTRAP (authenticated user)
-    // ══════════════════════════════════════════════
-
-    /**
-     * Load user data, initialize UI, connect real-time listeners.
-     * @param {firebase.User} user
-     */
     async function _bootstrapApp(user) {
-        // Show loading screen
+        if (_state.bootstrapping) return;
+        _state.bootstrapping = true;
+
         _showScreen('loading');
 
         try {
+            // Полная очистка перед инициализацией (важно при ре-логине)
+            try { DB.detachAll(); } catch (_) {}
+            try { UI.cleanup(); } catch (_) {}
+            try { Admin.cleanup(); } catch (_) {}
+
             _state.currentUser = user;
             _state.initialWorkspaceSelected = false;
 
-            // Ensure user data is initialized (handles interrupted registration)
-            await Auth.ensureUserInitialized(
-                user.uid,
-                user.email || '',
-                user.displayName || ''
-            );
+            // Инициализация пользователя (при прерванной регистрации)
+            try {
+                await Auth.ensureUserInitialized(
+                    user.uid,
+                    user.email || '',
+                    user.displayName || ''
+                );
+            } catch (err) {
+                console.error('ensureUserInitialized failed:', err);
+            }
 
-            // Load user settings
-            const settings = await DB.getUserSettings(user.uid);
+            // Загрузка настроек — некритичная ошибка не должна ломать всё
+            let settings = null;
+            try {
+                settings = await DB.getUserSettings(user.uid);
+            } catch (err) {
+                console.error('Failed to load user settings:', err);
+            }
 
-            // Check admin status
-            _state.isAdmin = await Auth.isAdmin();
+            // Проверка админа — некритичная ошибка
+            let isAdmin = false;
+            try {
+                isAdmin = await Auth.isAdmin();
+            } catch (err) {
+                console.error('Failed to check admin status:', err);
+            }
+            _state.isAdmin = isAdmin;
 
-            // Apply theme early (before showing the app) to avoid flash
+            // Применить тему до показа приложения
             if (settings && settings.theme) {
                 UI.applyTheme(settings.theme);
             }
 
-            // Initialize UI module
+            // Инициализация UI
             UI.init(user.uid, _state.isAdmin);
 
-            // Load settings into UI
             if (settings) {
                 UI.loadSettings(settings);
             }
 
-            // Initialize Admin module if user is admin
             if (_state.isAdmin) {
                 Admin.init(user.uid);
             }
 
-            // Connect workspace listener — auto-select first workspace on initial load
+            // Подключить listener на workspaces
             DB.onWorkspacesChanged(user.uid, (workspaces) => {
                 UI.renderWorkspaces(workspaces);
 
-                // Auto-select first workspace only once after bootstrap
                 if (!_state.initialWorkspaceSelected && workspaces.length > 0) {
                     _state.initialWorkspaceSelected = true;
                     UI.selectWorkspace(workspaces[0].id);
                 }
             });
 
-            // Show the app
             _showScreen('app');
 
         } catch (error) {
             console.error('Failed to bootstrap app:', error);
-            // Show app screen anyway with an error toast
             _showScreen('app');
             try {
-                UI.showToast('Failed to load some data. Please try refreshing.', 'error');
+                UI.showToast('Failed to load some data: ' + (error.code || error.message || 'Unknown error'), 'error');
             } catch (_) {
                 alert('Failed to load application data. Please refresh the page.');
             }
+        } finally {
+            _state.bootstrapping = false;
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  APP TEARDOWN (on logout)
-    // ══════════════════════════════════════════════
-
-    /**
-     * Clean up state and listeners when user signs out.
-     */
     function _teardownApp() {
         _state.currentUser = null;
         _state.isAdmin = false;
         _state.initialWorkspaceSelected = false;
+        _state.bootstrapping = false;
 
-        // Clean up UI state
         try { UI.cleanup(); } catch (_) {}
-
-        // Clean up Admin state
         try { Admin.cleanup(); } catch (_) {}
-
-        // Detach all Firestore listeners
         try { DB.detachAll(); } catch (_) {}
 
-        // Clear auth error and reset forms
         _hideAuthError();
         _resetAuthForms();
     }
-
-    // ══════════════════════════════════════════════
-    //  AUTH FORMS
-    // ══════════════════════════════════════════════
 
     function _bindAuthForms() {
         const loginForm = _el('login-form');
@@ -193,19 +146,16 @@ const App = (() => {
         const showRegisterLink = _el('show-register');
         const showLoginLink = _el('show-login');
 
-        // Login form submit
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             await _handleLogin();
         });
 
-        // Register form submit
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             await _handleRegister();
         });
 
-        // Toggle between login and register
         showRegisterLink.addEventListener('click', (e) => {
             e.preventDefault();
             _hideAuthError();
@@ -222,9 +172,6 @@ const App = (() => {
         });
     }
 
-    /**
-     * Handle login form submission.
-     */
     async function _handleLogin() {
         const email = _el('login-email').value.trim();
         const password = _el('login-password').value;
@@ -240,7 +187,6 @@ const App = (() => {
 
         try {
             await Auth.login(email, password);
-            // Auth state listener will handle the rest
         } catch (error) {
             _showAuthError(error.message);
         } finally {
@@ -248,9 +194,6 @@ const App = (() => {
         }
     }
 
-    /**
-     * Handle register form submission.
-     */
     async function _handleRegister() {
         const email = _el('register-email').value.trim();
         const displayName = _el('register-display-name').value.trim();
@@ -273,7 +216,6 @@ const App = (() => {
 
         try {
             await Auth.register({ email, password, displayName, inviteCode });
-            // Auth state listener will handle the rest
         } catch (error) {
             _showAuthError(error.message);
         } finally {
@@ -281,9 +223,6 @@ const App = (() => {
         }
     }
 
-    /**
-     * Check if this will be the first user (admin) to show/hide invite code field.
-     */
     async function _checkFirstUserForRegistration() {
         const inviteCodeGroup = _el('invite-code-group');
         const inviteCodeInput = _el('register-invite-code');
@@ -298,20 +237,11 @@ const App = (() => {
                 inviteCodeInput.setAttribute('required', 'required');
             }
         } catch (_) {
-            // Default: show invite code field (safer)
             inviteCodeGroup.style.display = '';
             inviteCodeInput.setAttribute('required', 'required');
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  UI HELPERS
-    // ══════════════════════════════════════════════
-
-    /**
-     * Show a specific screen, hiding all others.
-     * @param {'auth'|'loading'|'app'} name
-     */
     function _showScreen(name) {
         _el('auth-screen').classList.add('hidden');
         _el('loading-screen').classList.add('hidden');
@@ -321,10 +251,6 @@ const App = (() => {
         if (el) el.classList.remove('hidden');
     }
 
-    /**
-     * Show an error message on the auth screen.
-     * @param {string} message
-     */
     function _showAuthError(message) {
         const el = _el('auth-error');
         if (el) {
@@ -333,9 +259,6 @@ const App = (() => {
         }
     }
 
-    /**
-     * Hide the auth error message.
-     */
     function _hideAuthError() {
         const el = _el('auth-error');
         if (el) {
@@ -344,9 +267,6 @@ const App = (() => {
         }
     }
 
-    /**
-     * Reset auth form inputs to empty state.
-     */
     function _resetAuthForms() {
         const loginForm = _el('login-form');
         const registerForm = _el('register-form');
@@ -354,16 +274,10 @@ const App = (() => {
         if (loginForm) loginForm.reset();
         if (registerForm) registerForm.reset();
 
-        // Show login form, hide register form
         if (loginForm) loginForm.classList.remove('hidden');
         if (registerForm) registerForm.classList.add('hidden');
     }
 
-    /**
-     * Toggle button loading state (show spinner, disable button).
-     * @param {HTMLElement} btn
-     * @param {boolean} loading
-     */
     function _setButtonLoading(btn, loading) {
         if (!btn) return;
         const btnText = btn.querySelector('.btn-text');
@@ -380,20 +294,8 @@ const App = (() => {
         }
     }
 
-    // ══════════════════════════════════════════════
-    //  PUBLIC API
-    // ══════════════════════════════════════════════
-
-    return {
-        init
-    };
-
+    return { init };
 })();
-
-
-// ══════════════════════════════════════════════
-//  START THE APPLICATION
-// ══════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
     App.init();
