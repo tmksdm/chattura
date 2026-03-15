@@ -148,8 +148,50 @@ input, textarea, select, button {
     background: var(--scrollbar-thumb-hover);
 }
 
+/* ── Material Symbols ── */
+.material-symbols-rounded {
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24;
+    font-size: 24px;
+    vertical-align: middle;
+    user-select: none;
+}
+
+.material-symbols-rounded.filled {
+    font-variation-settings:
+        'FILL' 1,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24;
+}
+
+.material-symbols-rounded.icon-sm {
+    font-size: 18px;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 20;
+}
+
+.material-symbols-rounded.icon-lg {
+    font-size: 48px;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 48;
+}
+
 /* ── Utility ── */
 .hidden { display: none !important; }
+
+.spin {
+    animation: spin 0.8s linear infinite;
+}
 
 /* ── Screens ── */
 .screen {
@@ -182,6 +224,12 @@ input, textarea, select, button {
     font-size: 48px;
     display: block;
     margin-bottom: 8px;
+    color: var(--accent-primary);
+    font-variation-settings:
+        'FILL' 1,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 48;
 }
 
 .auth-logo h1 {
@@ -236,16 +284,19 @@ input, textarea, select, button {
     font-size: 48px;
     display: block;
     margin-bottom: 16px;
+    color: var(--accent-primary);
+    font-variation-settings:
+        'FILL' 1,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 48;
 }
 
 .loading-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--border-primary);
-    border-top-color: var(--accent-primary);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    font-size: 32px;
+    display: block;
     margin: 0 auto 12px;
+    color: var(--accent-primary);
 }
 
 @keyframes spin {
@@ -341,6 +392,15 @@ input, textarea, select, button {
     line-height: 1.4;
 }
 
+.btn .material-symbols-rounded {
+    font-size: 18px;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 500,
+        'GRAD' 0,
+        'opsz' 20;
+}
+
 .btn-primary {
     background: var(--accent-primary);
     color: var(--text-on-primary);
@@ -418,13 +478,24 @@ input, textarea, select, button {
     color: var(--text-primary);
 }
 
+.btn-icon-sm .material-symbols-rounded {
+    font-size: 18px;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 20;
+}
+
 .btn-loader {
-    width: 16px;
-    height: 16px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-loader .material-symbols-rounded {
+    font-size: 18px;
+    color: var(--text-on-primary);
 }
 
 /* ── Top Bar ── */
@@ -513,6 +584,16 @@ input, textarea, select, button {
     background: #fff8e1;
 }
 
+.banner-icon {
+    font-size: 18px;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 20;
+    flex-shrink: 0;
+}
+
 /* ── App Body ── */
 .app-body {
     flex: 1;
@@ -584,6 +665,7 @@ input, textarea, select, button {
     text-overflow: ellipsis;
     min-height: 36px;
     user-select: none;
+    gap: 8px;
 }
 
 .sidebar-list li:hover {
@@ -595,6 +677,21 @@ input, textarea, select, button {
     background: var(--bg-active);
     color: var(--text-primary);
     font-weight: 500;
+}
+
+.sidebar-list li .material-symbols-rounded {
+    font-size: 18px;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 20;
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+}
+
+.sidebar-list li.active .material-symbols-rounded {
+    color: var(--text-primary);
 }
 
 .sidebar-list li .sidebar-item-text {
@@ -637,6 +734,12 @@ input, textarea, select, button {
     font-size: 64px;
     display: block;
     margin-bottom: 16px;
+    color: var(--accent-primary);
+    font-variation-settings:
+        'FILL' 1,
+        'wght' 300,
+        'GRAD' 0,
+        'opsz' 48;
 }
 
 .chat-welcome h2 {
@@ -789,8 +892,16 @@ input, textarea, select, button {
     background: transparent;
     color: var(--text-tertiary);
     cursor: pointer;
-    font-size: 12px;
     transition: all var(--transition);
+}
+
+.message-action-btn .material-symbols-rounded {
+    font-size: 16px;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 20;
 }
 
 .message-action-btn:hover {
@@ -939,9 +1050,18 @@ input, textarea, select, button {
     background: var(--bg-hover);
     color: var(--text-tertiary);
     cursor: pointer;
-    font-size: 14px;
     line-height: 1;
 }
+
+.attachment-chip-remove .material-symbols-rounded {
+    font-size: 14px;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 20;
+}
+
 .attachment-chip-remove:hover {
     background: var(--accent-danger);
     color: var(--text-on-primary);
@@ -1162,6 +1282,34 @@ input, textarea, select, button {
     align-items: flex-start;
 }
 
+/* ── Changelog ── */
+.changelog-content {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+
+.changelog-content h2 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 20px;
+    margin-bottom: 8px;
+}
+
+.changelog-content h2:first-child {
+    margin-top: 0;
+}
+
+.changelog-content ul {
+    padding-left: 20px;
+    margin-bottom: 12px;
+}
+
+.changelog-content li {
+    margin-bottom: 2px;
+}
+
 /* ── Favorite Models ── */
 .favorite-models-list {
     margin-bottom: 12px;
@@ -1207,11 +1355,14 @@ input, textarea, select, button {
     background: transparent;
     color: var(--text-tertiary);
     cursor: pointer;
-    font-size: 14px;
 }
 .fav-model-delete:hover {
     color: var(--accent-danger);
     background: var(--bg-hover);
+}
+
+.fav-model-delete .material-symbols-rounded {
+    font-size: 16px;
 }
 
 /* ── Admin ── */
@@ -1273,6 +1424,9 @@ input, textarea, select, button {
 }
 
 .context-menu li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 8px 12px;
     font-size: 14px;
     cursor: pointer;
@@ -1281,11 +1435,25 @@ input, textarea, select, button {
     transition: background var(--transition);
 }
 
+.context-menu li .material-symbols-rounded {
+    font-size: 18px;
+    font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 20;
+    color: var(--text-secondary);
+}
+
 .context-menu li:hover {
     background: var(--bg-hover);
 }
 
 .context-menu li.danger {
+    color: var(--accent-danger);
+}
+
+.context-menu li.danger .material-symbols-rounded {
     color: var(--accent-danger);
 }
 
@@ -1302,6 +1470,9 @@ input, textarea, select, button {
 }
 
 .toast {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 10px 16px;
     border-radius: var(--radius-sm);
     font-size: 14px;
@@ -1310,6 +1481,11 @@ input, textarea, select, button {
     animation: toastIn 0.3s ease;
     pointer-events: auto;
     max-width: 360px;
+}
+
+.toast .material-symbols-rounded {
+    font-size: 18px;
+    flex-shrink: 0;
 }
 
 .toast-success { background: var(--accent-success); }
