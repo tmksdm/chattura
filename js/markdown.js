@@ -32,19 +32,24 @@ const Markdown = (() => {
         initialized = true;
     }
 
-    function render(text) {
-        init();
-        if (!text) return '';
-
-        try {
-            let html = marked.parse(text);
-            html = addCopyButtons(html);
-            return html;
-        } catch (e) {
-            console.error('Markdown render error:', e);
-            return escapeHtml(text);
-        }
+function render(text) {
+    if (!text) return '';
+    try {
+        // 1. Превращаем Markdown в HTML
+        let html = marked.parse(text);
+        
+        // 2. 👇 ПРОПУСКАЕМ ЧЕРЕЗ ФИЛЬТР — убираем все опасные теги
+        html = DOMPurify.sanitize(html);
+        
+        // 3. Добавляем кнопки копирования для блоков кода
+        html = addCopyButtons(html);
+        return html;
+    } catch (e) {
+        console.error('Ошибка рендера Markdown:', e);
+        // Если что-то пошло не так — просто покажем текст как есть
+        return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
+}
 
     function addCopyButtons(html) {
         return html.replace(/<pre><code(.*?)>/g, (match, attrs) => {
