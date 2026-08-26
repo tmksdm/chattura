@@ -240,8 +240,9 @@ const Auth = (() => {
             // Step 5: Save default settings
             await DB.saveUserSettings(user.uid, {
                 apiKey: '',
-                currentModel: 'anthropic/claude-sonnet-4',
+                currentModel: 'openrouter/free',
                 favoriteModels: [
+                    { id: 'openrouter/free', name: 'Free Models Router' },
                     { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4' },
                     { id: 'openai/gpt-4o', name: 'GPT-4o' },
                     { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash' }
@@ -454,8 +455,9 @@ const Auth = (() => {
         // Create default settings
         await DB.saveUserSettings(userId, {
             apiKey: '',
-            currentModel: 'anthropic/claude-sonnet-4',
+            currentModel: 'openrouter/free',
             favoriteModels: [
+                { id: 'openrouter/free', name: 'Free Models Router' },
                 { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4' },
                 { id: 'openai/gpt-4o', name: 'GPT-4o' },
                 { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash' }
