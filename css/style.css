@@ -728,6 +728,7 @@ input, textarea, select, button {
     flex: 1;
     display: flex;
     flex-direction: column;
+    position: relative;
     min-width: 0;
     overflow: hidden;
 }
@@ -800,10 +801,14 @@ input, textarea, select, button {
     display: flex;
     flex-direction: column;
     max-width: 85%;
-    padding: 10px 14px;
-    border-radius: var(--radius);
     position: relative;
     animation: messageFadeIn 0.25s ease;
+}
+
+.message-bubble {
+    max-width: 100%;
+    padding: 10px 14px;
+    border-radius: var(--radius);
 }
 
 @keyframes messageFadeIn {
@@ -813,24 +818,35 @@ input, textarea, select, button {
 
 .message-user {
     align-self: flex-end;
+    align-items: flex-end;
+}
+
+.message-user .message-bubble {
     background: var(--bg-msg-user);
     border-bottom-right-radius: 4px;
 }
 
 .message-assistant {
     align-self: flex-start;
+    align-items: flex-start;
+}
+
+.message-assistant .message-bubble {
     background: var(--bg-msg-assistant);
     border-bottom-left-radius: 4px;
 }
 
 .message-system-error {
     align-self: center;
-    background: var(--bg-msg-system);
-    border: 1px solid var(--accent-danger);
     color: var(--accent-danger);
     font-size: 13px;
     max-width: 90%;
     text-align: center;
+}
+
+.message-system-error .message-bubble {
+    background: var(--bg-msg-system);
+    border: 1px solid var(--accent-danger);
 }
 
 .message-content {
@@ -880,12 +896,41 @@ input, textarea, select, button {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 6px;
+    min-height: 26px;
+    margin-top: 2px;
+    padding: 0 4px;
+}
+
+.message-user .message-meta {
+    justify-content: flex-end;
 }
 
 .message-time {
     font-size: 11px;
     color: var(--text-tertiary);
+}
+
+.scroll-to-bottom-btn {
+    position: absolute;
+    right: max(20px, calc((100% - 820px) / 2 + 20px));
+    bottom: 92px;
+    z-index: 5;
+    width: 42px;
+    height: 42px;
+    border: 1px solid var(--border-primary);
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 1;
+    transition: transform var(--transition), background var(--transition);
+}
+
+.scroll-to-bottom-btn:hover {
+    background: var(--bg-hover);
+    transform: translateY(2px);
 }
 
 .message-model {
@@ -902,11 +947,13 @@ input, textarea, select, button {
     display: flex;
     gap: 2px;
     opacity: 0;
+    visibility: hidden;
     transition: opacity var(--transition);
 }
 
 .message:hover .message-actions {
     opacity: 1;
+    visibility: visible;
 }
 
 .message-action-btn {
@@ -1132,6 +1179,11 @@ input, textarea, select, button {
 .btn-send:hover {
     background: var(--bg-hover);
     color: var(--accent-hover);
+}
+.btn-send:disabled,
+.btn-stop:disabled {
+    opacity: 0.45;
+    cursor: wait;
 }
 
 .btn-stop {
@@ -1642,7 +1694,18 @@ input, textarea, select, button {
     margin-top: 8px;
 }
 
+.message.message-editing {
+    width: min(720px, 92%);
+    max-width: 92%;
+}
+
+.message.message-editing .message-bubble {
+    box-sizing: border-box;
+    width: 100%;
+}
+
 .message-edit-area textarea {
+    box-sizing: border-box;
     width: 100%;
     padding: 8px 12px;
     background: var(--bg-input);
@@ -1653,7 +1716,8 @@ input, textarea, select, button {
     font-size: 14px;
     line-height: 1.5;
     resize: vertical;
-    min-height: 60px;
+    min-height: 140px;
+    max-height: 50vh;
     outline: none;
 }
 
@@ -1666,6 +1730,22 @@ input, textarea, select, button {
     gap: 6px;
     margin-top: 6px;
     justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+    .message.message-editing {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .message-edit-area textarea {
+        min-height: 120px;
+    }
+
+    .scroll-to-bottom-btn {
+        right: 16px;
+        bottom: 88px;
+    }
 }
 
 /* ── Upload Progress ── */

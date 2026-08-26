@@ -6,8 +6,8 @@
     <title>Chattura</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL@20..48,100..700,0..1&icon_names=add,admin_panel_settings,attach_file,chat,chat_bubble,check,chevron_right,close,content_copy,dark_mode,delete,download,drive_file_rename_outline,edit,error,folder,info,key,light_mode,logout,menu,more_vert,person,progress_activity,refresh,send,settings,stop_circle,upload,vpn_key,warning,wifi_off&display=block">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text x='50' y='50' font-size='80' text-anchor='middle' dominant-baseline='central'>💬</text></svg>">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL@20..48,100..700,0..1&icon_names=add,admin_panel_settings,attach_file,chat,chat_bubble,check,chevron_right,close,content_copy,dark_mode,delete,download,drive_file_rename_outline,edit,error,folder,info,key,keyboard_arrow_down,light_mode,logout,menu,more_vert,person,progress_activity,refresh,send,settings,stop_circle,upload,vpn_key,warning,wifi_off&display=block">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%236366f1' d='M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z'/></svg>">
 </head>
 <body class="theme-dark">
 
@@ -162,6 +162,9 @@
                     </div>
                     <div id="messages-list" class="messages-list"></div>
                 </div>
+                <button id="scroll-to-bottom-btn" class="scroll-to-bottom-btn hidden" type="button" aria-label="Jump to latest response" title="Jump to latest response">
+                    <span class="material-symbols-rounded">keyboard_arrow_down</span>
+                </button>
 
                 <!-- Input Area -->
                 <div id="chat-input-area" class="chat-input-area hidden">
@@ -171,10 +174,10 @@
                             <span class="material-symbols-rounded">attach_file</span>
                         </button>
                         <textarea id="message-input" placeholder="Type a message..." rows="1"></textarea>
-                        <button id="send-btn" class="btn-icon btn-send" title="Send (Enter)">
+                        <button id="send-btn" class="btn-icon btn-send" title="Send (Enter)" aria-label="Send (Enter)">
                             <span class="material-symbols-rounded">send</span>
                         </button>
-                        <button id="stop-btn" class="btn-icon btn-stop hidden" title="Stop generation">
+                        <button id="stop-btn" class="btn-icon btn-stop hidden" title="Stop generation" aria-label="Stop generation">
                             <span class="material-symbols-rounded">stop_circle</span>
                         </button>
                     </div>
@@ -425,6 +428,8 @@
 
     <script src="js/config.js"></script>
     <script src="js/free-models.js"></script>
+    <script src="js/steering.js"></script>
+    <script src="js/chat-scroll.js"></script>
     <script src="js/markdown.js"></script>
     <script src="js/file-handler.js"></script>
     <script src="js/db.js"></script>

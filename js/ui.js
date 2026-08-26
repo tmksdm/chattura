@@ -23,6 +23,10 @@ const UI = (() => {
         isStreaming: false,
         streamingMessageId: null,
         streamingContent: '',
+        pendingSteer: null,
+        activeRequestHistory: [],
+        abortReason: null,
+        followStreaming: true,
         editingMessageId: null,
         lastPaginationDoc: null,
         hasMoreMessages: false,
@@ -80,6 +84,7 @@ const UI = (() => {
             messagesList: _el('messages-list'),
             loadEarlierWrapper: _el('load-earlier-wrapper'),
             loadEarlierBtn: _el('load-earlier-btn'),
+            scrollToBottomBtn: _el('scroll-to-bottom-btn'),
 
             // Input
             chatInputArea: _el('chat-input-area'),
@@ -246,6 +251,19 @@ function init(userId, isAdmin) {
 
         // Load earlier messages
         DOM.loadEarlierBtn.addEventListener('click', () => _loadEarlierMessages());
+        DOM.scrollToBottomBtn.addEventListener('click', () => {
+            _state.followStreaming = true;
+            _updateScrollDownButton();
+            _scrollToBottom(false);
+        });
+        DOM.messagesContainer.addEventListener('scroll', () => {
+            _state.followStreaming = ChatScroll.isNearBottom({
+                scrollTop: DOM.messagesContainer.scrollTop,
+                clientHeight: DOM.messagesContainer.clientHeight,
+                scrollHeight: DOM.messagesContainer.scrollHeight
+            });
+            _updateScrollDownButton();
+        });
 
         // Window resize
         window.addEventListener('resize', _onResize);
@@ -621,6 +639,7 @@ function init(userId, isAdmin) {
         _state.editingMessageId = null;
         _state.streamingMessageId = null;
         _state.streamingContent = '';
+        _state.followStreaming = true;
 
         // Update sidebar active state
         DOM.chatList.querySelectorAll('li').forEach(li => {
@@ -688,6 +707,8 @@ function init(userId, isAdmin) {
     // ══════════════════════════════════════════════
 
     function _renderAllMessages(messages) {
+        const previousScrollTop = DOM.messagesContainer.scrollTop;
+        const preserveReadingPosition = !_state.followStreaming;
         DOM.messagesList.innerHTML = '';
 
         messages.forEach(msg => {
@@ -695,7 +716,14 @@ function init(userId, isAdmin) {
             DOM.messagesList.appendChild(el);
         });
 
-        _scrollToBottom();
+        if (preserveReadingPosition) {
+            requestAnimationFrame(() => {
+                DOM.messagesContainer.scrollTop = previousScrollTop;
+                _updateScrollDownButton();
+            });
+        } else {
+            _scrollToBottom();
+        }
     }
 
     function _createMessageElement(msg) {
@@ -712,6 +740,8 @@ function init(userId, isAdmin) {
         }
 
         // Content
+        const bubbleDiv = document.createElement('div');
+        bubbleDiv.classList.add('message-bubble');
         const contentDiv = document.createElement('div');
         contentDiv.classList.add('message-content');
 
@@ -723,7 +753,7 @@ function init(userId, isAdmin) {
             contentDiv.innerHTML = Markdown.renderPlainText(msg.content || '');
         }
 
-        div.appendChild(contentDiv);
+        bubbleDiv.appendChild(contentDiv);
 
         // Image attachments display
         if (msg.attachments && msg.attachments.length > 0) {
@@ -735,9 +765,11 @@ function init(userId, isAdmin) {
                 img.alt = att.originalName || att.fileName || 'Image';
                 img.loading = 'lazy';
                 img.addEventListener('click', () => window.open(img.src, '_blank'));
-                div.appendChild(img);
+                bubbleDiv.appendChild(img);
             });
         }
+
+        div.appendChild(bubbleDiv);
 
         // Meta row: time + actions
         const metaDiv = document.createElement('div');
@@ -797,6 +829,7 @@ function init(userId, isAdmin) {
         const btn = document.createElement('button');
         btn.classList.add('message-action-btn');
         btn.title = title;
+        btn.setAttribute('aria-label', title);
         btn.innerHTML = `<span class="material-symbols-rounded">${icon}</span>`;
         btn.addEventListener('click', onClick);
         return btn;
@@ -811,6 +844,15 @@ function init(userId, isAdmin) {
                 container.scrollTop = container.scrollHeight;
             }
         });
+    }
+
+    function _updateScrollDownButton() {
+        if (!DOM.scrollToBottomBtn) return;
+        const hasScrollableContent = DOM.messagesContainer.scrollHeight > DOM.messagesContainer.clientHeight;
+        DOM.scrollToBottomBtn.classList.toggle(
+            'hidden',
+            _state.followStreaming || !hasScrollableContent || !_state.currentChatId
+        );
     }
 
     function _formatTimestamp(ts) {
@@ -838,6 +880,8 @@ function init(userId, isAdmin) {
     // ══════════════════════════════════════════════
 
 function _showStreamingMessage() {
+    _state.followStreaming = true;
+    _updateScrollDownButton();
     const div = document.createElement('div');
     div.classList.add('message', 'message-assistant');
     div.dataset.id = '__streaming__';
@@ -846,7 +890,10 @@ function _showStreamingMessage() {
     contentDiv.classList.add('message-content');
     contentDiv.innerHTML = '<span class="streaming-cursor">▊</span>';
 
-    div.appendChild(contentDiv);
+    const bubbleDiv = document.createElement('div');
+    bubbleDiv.classList.add('message-bubble');
+    bubbleDiv.appendChild(contentDiv);
+    div.appendChild(bubbleDiv);
     DOM.messagesList.appendChild(div);
 
     // Typing indicator сразу под сообщением
@@ -859,7 +906,7 @@ function _showStreamingMessage() {
     `;
     DOM.messagesList.appendChild(indicator);
 
-    _scrollToBottom();
+    if (_state.followStreaming) _scrollToBottom();
 }
 
 function _updateStreamingMessage(content) {
@@ -868,7 +915,11 @@ function _updateStreamingMessage(content) {
 
     const contentDiv = el.querySelector('.message-content');
     contentDiv.innerHTML = Markdown.render(content) + '<span class="streaming-cursor">▊</span>';
-    _scrollToBottom();
+    if (_state.followStreaming) {
+        _scrollToBottom();
+    } else {
+        _updateScrollDownButton();
+    }
 }
 
 function _removeStreamingMessage() {
@@ -884,10 +935,47 @@ function _removeStreamingMessage() {
     // ══════════════════════════════════════════════
 
     async function _handleSend() {
-        if (_state.isStreaming) return;
-
         const content = DOM.messageInput.value.trim();
         const attachments = [..._state.pendingAttachments];
+
+        const hasContent = Boolean(content)
+            || attachments.some(attachment => attachment.type === 'text' || attachment.type === 'image');
+        if (!hasContent) return;
+
+        if (!_state.settings?.apiKey) {
+            showToast('Set your API key in Settings first', 'warning');
+            openSettings('api');
+            return;
+        }
+        if (!_state.settings?.currentModel) {
+            showToast('Select a model in Settings first', 'warning');
+            openSettings('models');
+            return;
+        }
+        if (_state.pendingSteer) {
+            showToast('Your steer is already being applied', 'info');
+            return;
+        }
+
+        DOM.messageInput.value = '';
+        DOM.messageInput.style.height = 'auto';
+        _clearAttachments();
+
+        const draft = { content, attachments };
+        if (_state.isStreaming) {
+            _state.pendingSteer = draft;
+            _state.abortReason = 'steer';
+            _updateSendStopButtons();
+            showToast('Steering the current response...', 'info');
+            API.abortStream();
+            return;
+        }
+
+        await _sendDraft(draft);
+    }
+
+    async function _sendDraft(draft, options = {}) {
+        const { content, attachments } = draft;
 
         // Build text content from text/pdf attachments
         let fullContent = content;
@@ -900,29 +988,13 @@ function _removeStreamingMessage() {
 
         if (!fullContent && imageAttachments.length === 0) return;
 
-        // Clear input and attachments
-        DOM.messageInput.value = '';
-        DOM.messageInput.style.height = 'auto';
-        _clearAttachments();
-
-        // Check settings
-        if (!_state.settings?.apiKey) {
-            showToast('Set your API key in Settings first', 'warning');
-            openSettings('api');
-            return;
-        }
-        if (!_state.settings?.currentModel) {
-            showToast('Select a model in Settings first', 'warning');
-            openSettings('models');
-            return;
-        }
-
         // Запоминаем, нужно ли генерировать название (это первое сообщение в чате)
-        const shouldAutoTitle = _state.messages.length === 0;
+        const shouldAutoTitle = !options.historyOverride && _state.messages.length === 0;
 
         try {
             // Process images: upload to Storage + get base64
             const imageDataForMessage = []; // for Firestore message attachments
+            const requestImageAttachments = []; // in-memory history for immediate steering
             const base64Urls = []; // for API call
 
             if (imageAttachments.length > 0) {
@@ -931,30 +1003,51 @@ function _removeStreamingMessage() {
                 const tempMsgId = 'temp_' + Date.now().toString(36);
 
                 for (const img of imageAttachments) {
+                    let base64;
                     try {
-                        const result = await Storage.uploadImageWithBase64(
+                        base64 = await FileHandler.imageFileToBase64(img.file);
+                        base64Urls.push(base64);
+                    } catch (err) {
+                        console.error('Image conversion failed:', err);
+                        showToast(`Failed to read ${img.fileName}: ${err.message}`, 'error');
+                        continue;
+                    }
+
+                    try {
+                        const result = await Storage.uploadFile(
                             _state.userId,
                             tempMsgId,
                             img.file
                         );
-                        imageDataForMessage.push({
-                            type: img.file.type,
-                            url: result.storageUrl,
-                            base64: result.base64,
+                        const storedAttachment = {
+                            type: result.type || img.file.type,
+                            url: result.url,
                             path: result.path,
                             originalName: result.originalName,
                             size: result.size
-                        });
-                        base64Urls.push(result.base64);
+                        };
+                        imageDataForMessage.push(storedAttachment);
+                        requestImageAttachments.push(storedAttachment);
                     } catch (err) {
-                        console.error('Image upload failed:', err);
-                        showToast(`Failed to upload ${img.fileName}: ${err.message}`, 'error');
+                        console.warn('Image will be sent without Storage persistence:', err);
+                        requestImageAttachments.push({
+                            type: img.file.type,
+                            base64,
+                            originalName: img.fileName,
+                            size: img.file.size
+                        });
+                        fullContent += `${fullContent ? '\n\n' : ''}[Image attached: ${img.fileName}]`;
+                        showToast(`${img.fileName} will be sent, but could not be saved to Storage`, 'warning');
                     }
                 }
             }
 
+            if (!fullContent.trim() && base64Urls.length === 0) {
+                throw new Error('No image could be prepared for sending.');
+            }
+
             // Save user message to Firestore
-            const userMsgId = await DB.addMessage(_state.userId, {
+            await DB.addMessage(_state.userId, {
                 chatId: _state.currentChatId,
                 role: 'user',
                 content: fullContent,
@@ -962,11 +1055,17 @@ function _removeStreamingMessage() {
             });
 
             // Build conversation history from _state.messages (before the new one is added by listener)
-            const history = _state.messages.map(m => ({
-                role: m.role,
-                content: m.content || '',
-                attachments: m.attachments || []
-            }));
+            const history = options.historyOverride || _state.messages.map(m => ({
+                    role: m.role,
+                    content: m.content || '',
+                    attachments: m.attachments || []
+                }));
+
+            _state.activeRequestHistory = Steering.createActiveHistory(
+                history,
+                fullContent,
+                requestImageAttachments
+            );
 
             // Get workspace system prompt
             const ws = _state.workspaces.find(w => w.id === _state.currentWorkspaceId);
@@ -993,80 +1092,126 @@ function _removeStreamingMessage() {
                     _updateStreamingMessage(full);
                 },
                 onComplete: async (fullContent, usage, actualModel) => {
-                    _removeStreamingMessage();
-                    _state.isStreaming = false;
-                    _updateSendStopButtons();
-
-                    if (fullContent.trim()) {
-                        // Save assistant message to Firestore
-                        await DB.addMessage(_state.userId, {
-                            chatId: _state.currentChatId,
-                            role: 'assistant',
-                            content: fullContent,
-                            model: actualModel || _state.settings.currentModel
-                        });
-                    }
-
-                    // Auto-generate title if this is the first exchange
-                    if (shouldAutoTitle && fullContent.trim()) {
-                        _autoGenerateTitle(content || fullContent);
-                    }
+                    await _settleStreamingResponse(fullContent, actualModel, {
+                        afterSave: () => {
+                            if (shouldAutoTitle && fullContent.trim()) {
+                                _autoGenerateTitle(content || fullContent);
+                            }
+                        }
+                    });
                 },
                 onError: async (error, partialContent, actualModel) => {
-                    _removeStreamingMessage();
-                    _state.isStreaming = false;
-                    _updateSendStopButtons();
-
                     console.error('Stream error:', error);
-
-                    // Save partial content if any
-                    if (partialContent && partialContent.trim()) {
-                        await DB.addMessage(_state.userId, {
-                            chatId: _state.currentChatId,
-                            role: 'assistant',
-                            content: partialContent + '\n\n---\n*Generation interrupted due to error.*',
-                            model: actualModel || _state.settings.currentModel
-                        });
-                    }
-
-                    // Show error as a system message in chat
-                    _appendErrorMessage(error.message || 'An error occurred during generation.');
+                    await _settleStreamingResponse(partialContent, actualModel, {
+                        errorMessage: error.message || 'An error occurred during generation.'
+                    });
                 }
             });
 
         } catch (error) {
             console.error('Send error:', error);
             _state.isStreaming = false;
+            _state.activeRequestHistory = [];
+            _state.abortReason = null;
             _updateSendStopButtons();
             showToast('Failed to send message: ' + error.message, 'error');
         }
     }
 
-    function _handleStop() {
-        API.abortStream();
+    async function _settleStreamingResponse(content, actualModel, options = {}) {
+        _removeStreamingMessage();
+
+        const cleanContent = String(content || '').trim();
+        const continuationHistory = Steering.createContinuationHistory(
+            _state.activeRequestHistory,
+            cleanContent
+        );
+
+        if (cleanContent) {
+            const storedContent = options.errorMessage
+                ? `${cleanContent}\n\n---\n*Generation interrupted due to error.*`
+                : cleanContent;
+            try {
+                await DB.addMessage(_state.userId, {
+                    chatId: _state.currentChatId,
+                    role: 'assistant',
+                    content: storedContent,
+                    model: actualModel || _state.settings.currentModel
+                });
+            } catch (error) {
+                console.error('Failed to save assistant response:', error);
+                showToast('The response could not be saved, but steering can continue', 'error');
+            }
+        }
+
+        if (options.afterSave) options.afterSave();
+
+        // Read this only after persistence: a steer may arrive while Firestore is saving.
+        const pendingSteer = _state.pendingSteer;
+
         _state.isStreaming = false;
+        _state.streamingContent = '';
+        _state.activeRequestHistory = [];
+        _state.abortReason = null;
         _updateSendStopButtons();
+
+        if (pendingSteer) {
+            try {
+                await _sendDraft(pendingSteer, { historyOverride: continuationHistory });
+            } finally {
+                _state.pendingSteer = null;
+                _updateSendStopButtons();
+            }
+        } else if (options.errorMessage) {
+            _state.pendingSteer = null;
+            _appendErrorMessage(options.errorMessage);
+        } else {
+            _state.pendingSteer = null;
+        }
+    }
+
+    function _handleStop() {
+        _state.pendingSteer = null;
+        _state.abortReason = 'stop';
+        _updateSendStopButtons();
+        API.abortStream();
     }
 
     function _updateSendStopButtons() {
+        DOM.sendBtn.classList.remove('hidden');
+        DOM.sendBtn.disabled = Boolean(_state.pendingSteer);
+        DOM.sendBtn.title = _state.isStreaming ? 'Steer response (Enter)' : 'Send (Enter)';
+        DOM.sendBtn.setAttribute('aria-label', DOM.sendBtn.title);
+        DOM.messageInput.placeholder = _state.isStreaming
+            ? 'Send a new instruction to steer the response...'
+            : 'Type a message...';
+
         if (_state.isStreaming) {
-            DOM.sendBtn.classList.add('hidden');
             DOM.stopBtn.classList.remove('hidden');
+            DOM.stopBtn.disabled = Boolean(_state.abortReason);
+            DOM.stopBtn.setAttribute('aria-label', 'Stop generation');
         } else {
-            DOM.sendBtn.classList.remove('hidden');
             DOM.stopBtn.classList.add('hidden');
+            DOM.stopBtn.disabled = false;
         }
     }
 
     function _appendErrorMessage(text) {
         const div = document.createElement('div');
         div.classList.add('message', 'message-system-error');
+        const bubbleDiv = document.createElement('div');
+        bubbleDiv.classList.add('message-bubble');
         const contentDiv = document.createElement('div');
         contentDiv.classList.add('message-content');
         contentDiv.innerHTML = `<span class="material-symbols-rounded icon-sm" style="vertical-align:middle;margin-right:4px;">error</span> ${_escapeHtml(text)}`;
-        div.appendChild(contentDiv);
+        bubbleDiv.appendChild(contentDiv);
+        div.appendChild(bubbleDiv);
         DOM.messagesList.appendChild(div);
-        _scrollToBottom(true);
+        if (_state.followStreaming) {
+            _scrollToBottom();
+        } else {
+            _updateScrollDownButton();
+        }
     }
 
     async function _autoGenerateTitle(userMessage) {
@@ -1096,6 +1241,7 @@ function _removeStreamingMessage() {
 
         const el = DOM.messagesList.querySelector(`[data-id="${msg.id}"]`);
         if (!el) return;
+        el.classList.add('message-editing');
 
         _state.editingMessageId = msg.id;
 
@@ -1122,6 +1268,7 @@ function _removeStreamingMessage() {
 
         editArea.querySelector('.edit-cancel-btn').addEventListener('click', () => {
             _state.editingMessageId = null;
+            el.classList.remove('message-editing');
             // Re-render this message
             contentDiv.innerHTML = Markdown.renderPlainText(originalContent);
         });
@@ -1173,6 +1320,12 @@ function _removeStreamingMessage() {
         const imageAttachments = (originalMsg.attachments || []).filter(a => a.type && a.type.startsWith('image/'));
         const base64Urls = imageAttachments.map(a => a.base64 || a.url).filter(Boolean);
 
+        _state.activeRequestHistory = Steering.createActiveHistory(
+            history,
+            content,
+            originalMsg.attachments || []
+        );
+
         _state.isStreaming = true;
         _state.streamingContent = '';
         _updateSendStopButtons();
@@ -1193,34 +1346,12 @@ function _removeStreamingMessage() {
                 _updateStreamingMessage(full);
             },
             onComplete: async (fullContent, usage, actualModel) => {
-                _removeStreamingMessage();
-                _state.isStreaming = false;
-                _updateSendStopButtons();
-
-                if (fullContent.trim()) {
-                    await DB.addMessage(_state.userId, {
-                        chatId: _state.currentChatId,
-                        role: 'assistant',
-                        content: fullContent,
-                        model: actualModel || _state.settings.currentModel
-                    });
-                }
+                await _settleStreamingResponse(fullContent, actualModel);
             },
             onError: async (error, partialContent, actualModel) => {
-                _removeStreamingMessage();
-                _state.isStreaming = false;
-                _updateSendStopButtons();
-
-                if (partialContent && partialContent.trim()) {
-                    await DB.addMessage(_state.userId, {
-                        chatId: _state.currentChatId,
-                        role: 'assistant',
-                        content: partialContent + '\n\n---\n*Generation interrupted due to error.*',
-                        model: actualModel || _state.settings.currentModel
-                    });
-                }
-
-                _appendErrorMessage(error.message || 'An error occurred.');
+                await _settleStreamingResponse(partialContent, actualModel, {
+                    errorMessage: error.message || 'An error occurred.'
+                });
             }
         });
     }
@@ -1269,6 +1400,12 @@ function _removeStreamingMessage() {
             const imageAttachments = (lastUserMsg.attachments || []).filter(a => a.type && a.type.startsWith('image/'));
             const base64Urls = imageAttachments.map(a => a.base64 || a.url).filter(Boolean);
 
+            _state.activeRequestHistory = Steering.createActiveHistory(
+                history,
+                lastUserMsg.content || '',
+                lastUserMsg.attachments || []
+            );
+
             _state.isStreaming = true;
             _state.streamingContent = '';
             _updateSendStopButtons();
@@ -1289,33 +1426,12 @@ function _removeStreamingMessage() {
                     _updateStreamingMessage(full);
                 },
                 onComplete: async (fullContent, usage, actualModel) => {
-                    _removeStreamingMessage();
-                    _state.isStreaming = false;
-                    _updateSendStopButtons();
-
-                    if (fullContent.trim()) {
-                        await DB.addMessage(_state.userId, {
-                            chatId: _state.currentChatId,
-                            role: 'assistant',
-                            content: fullContent,
-                            model: actualModel || _state.settings.currentModel
-                        });
-                    }
+                    await _settleStreamingResponse(fullContent, actualModel);
                 },
                 onError: async (error, partialContent, actualModel) => {
-                    _removeStreamingMessage();
-                    _state.isStreaming = false;
-                    _updateSendStopButtons();
-
-                    if (partialContent && partialContent.trim()) {
-                        await DB.addMessage(_state.userId, {
-                            chatId: _state.currentChatId,
-                            role: 'assistant',
-                            content: partialContent + '\n\n---\n*Generation interrupted due to error.*',
-                            model: actualModel || _state.settings.currentModel
-                        });
-                    }
-                    _appendErrorMessage(error.message || 'An error occurred.');
+                    await _settleStreamingResponse(partialContent, actualModel, {
+                        errorMessage: error.message || 'An error occurred.'
+                    });
                 }
             });
 
@@ -2279,6 +2395,10 @@ function cleanup() {
     _state.isStreaming = false;
     _state.streamingMessageId = null;
     _state.streamingContent = '';
+    _state.pendingSteer = null;
+    _state.activeRequestHistory = [];
+    _state.abortReason = null;
+    _state.followStreaming = true;
     _state.editingMessageId = null;
     _state.lastPaginationDoc = null;
     _state.hasMoreMessages = false;
