@@ -617,6 +617,16 @@ input, textarea, select, button {
     background: var(--bg-sidebar);
     border-right: 1px solid var(--border-secondary);
     overflow: hidden;
+    transition: width 0.2s ease, min-width 0.2s ease;
+}
+
+/* Desktop: collapse sidebar via hamburger */
+@media (min-width: 768px) {
+    .sidebar.collapsed {
+        width: 0;
+        min-width: 0;
+        border-right: none;
+    }
 }
 
 .sidebar-section {

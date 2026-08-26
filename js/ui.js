@@ -482,14 +482,22 @@ function init(userId, isAdmin) {
     }
 
     function openSidebar() {
-        DOM.sidebar.classList.add('open');
-        DOM.sidebarOverlay.classList.remove('hidden');
+        if (_state.isMobile) {
+            DOM.sidebar.classList.add('open');
+            DOM.sidebarOverlay.classList.remove('hidden');
+        } else {
+            DOM.sidebar.classList.remove('collapsed');
+        }
         _state.sidebarOpen = true;
     }
 
     function closeSidebar() {
-        DOM.sidebar.classList.remove('open');
-        DOM.sidebarOverlay.classList.add('hidden');
+        if (_state.isMobile) {
+            DOM.sidebar.classList.remove('open');
+            DOM.sidebarOverlay.classList.add('hidden');
+        } else {
+            DOM.sidebar.classList.add('collapsed');
+        }
         _state.sidebarOpen = false;
     }
 
