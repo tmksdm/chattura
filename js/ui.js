@@ -28,6 +28,10 @@ const UI = (() => {
         hasMoreMessages: false,
         sidebarOpen: false,
         settingsDebounceTimer: null,
+        freeModels: [],
+        freeModelQuery: '',
+        freeModelsStatus: 'idle',
+        freeModelsError: '',
         isMobile: window.innerWidth < 768,
         eventsBound: false        
     };
@@ -97,6 +101,10 @@ const UI = (() => {
             newFavModelId: _el('new-fav-model-id'),
             newFavModelName: _el('new-fav-model-name'),
             addFavModel: _el('add-fav-model'),
+            freeModelSearch: _el('free-model-search'),
+            refreshFreeModels: _el('refresh-free-models'),
+            freeModelsStatus: _el('free-models-status'),
+            freeModelsList: _el('free-models-list'),
             settingsTemperature: _el('settings-temperature'),
             tempValue: _el('temp-value'),
             settingsMaxTokens: _el('settings-max-tokens'),
@@ -255,6 +263,7 @@ function init(userId, isAdmin) {
                 $$('.settings-panel').forEach(p => p.classList.remove('active'));
                 const panel = $(`.settings-panel[data-panel="${item.dataset.tab}"]`);
                 if (panel) panel.classList.add('active');
+                if (item.dataset.tab === 'models') _loadFreeModels();
             });
         });
 
@@ -288,11 +297,17 @@ function init(userId, isAdmin) {
             await _saveSettings({ currentModel: model });
             _state.settings.currentModel = model;
             _updateModelSelect();
+            _renderFreeModels();
             showToast('Model saved', 'success');
         });
 
         // Favorite models
         DOM.addFavModel.addEventListener('click', () => _addFavoriteModel());
+        DOM.refreshFreeModels.addEventListener('click', () => _loadFreeModels(true));
+        DOM.freeModelSearch.addEventListener('input', (e) => {
+            _state.freeModelQuery = e.target.value;
+            _renderFreeModels();
+        });
 
         // Generation params
         DOM.settingsTemperature.addEventListener('input', (e) => {
@@ -736,6 +751,14 @@ function init(userId, isAdmin) {
             metaDiv.appendChild(timeSpan);
         }
 
+        if (msg.role === 'assistant' && msg.model) {
+            const modelSpan = document.createElement('span');
+            modelSpan.classList.add('message-model');
+            modelSpan.textContent = msg.model;
+            modelSpan.title = `Model: ${msg.model}`;
+            metaDiv.appendChild(modelSpan);
+        }
+
         // Actions
         const actionsDiv = document.createElement('div');
         actionsDiv.classList.add('message-actions');
@@ -969,7 +992,7 @@ function _removeStreamingMessage() {
                     _state.streamingContent = full;
                     _updateStreamingMessage(full);
                 },
-                onComplete: async (fullContent, usage) => {
+                onComplete: async (fullContent, usage, actualModel) => {
                     _removeStreamingMessage();
                     _state.isStreaming = false;
                     _updateSendStopButtons();
@@ -979,7 +1002,8 @@ function _removeStreamingMessage() {
                         await DB.addMessage(_state.userId, {
                             chatId: _state.currentChatId,
                             role: 'assistant',
-                            content: fullContent
+                            content: fullContent,
+                            model: actualModel || _state.settings.currentModel
                         });
                     }
 
@@ -988,7 +1012,7 @@ function _removeStreamingMessage() {
                         _autoGenerateTitle(content || fullContent);
                     }
                 },
-                onError: async (error, partialContent) => {
+                onError: async (error, partialContent, actualModel) => {
                     _removeStreamingMessage();
                     _state.isStreaming = false;
                     _updateSendStopButtons();
@@ -1000,7 +1024,8 @@ function _removeStreamingMessage() {
                         await DB.addMessage(_state.userId, {
                             chatId: _state.currentChatId,
                             role: 'assistant',
-                            content: partialContent + '\n\n---\n*Generation interrupted due to error.*'
+                            content: partialContent + '\n\n---\n*Generation interrupted due to error.*',
+                            model: actualModel || _state.settings.currentModel
                         });
                     }
 
@@ -1167,7 +1192,7 @@ function _removeStreamingMessage() {
                 _state.streamingContent = full;
                 _updateStreamingMessage(full);
             },
-            onComplete: async (fullContent) => {
+            onComplete: async (fullContent, usage, actualModel) => {
                 _removeStreamingMessage();
                 _state.isStreaming = false;
                 _updateSendStopButtons();
@@ -1176,11 +1201,12 @@ function _removeStreamingMessage() {
                     await DB.addMessage(_state.userId, {
                         chatId: _state.currentChatId,
                         role: 'assistant',
-                        content: fullContent
+                        content: fullContent,
+                        model: actualModel || _state.settings.currentModel
                     });
                 }
             },
-            onError: async (error, partialContent) => {
+            onError: async (error, partialContent, actualModel) => {
                 _removeStreamingMessage();
                 _state.isStreaming = false;
                 _updateSendStopButtons();
@@ -1189,7 +1215,8 @@ function _removeStreamingMessage() {
                     await DB.addMessage(_state.userId, {
                         chatId: _state.currentChatId,
                         role: 'assistant',
-                        content: partialContent + '\n\n---\n*Generation interrupted due to error.*'
+                        content: partialContent + '\n\n---\n*Generation interrupted due to error.*',
+                        model: actualModel || _state.settings.currentModel
                     });
                 }
 
@@ -1261,7 +1288,7 @@ function _removeStreamingMessage() {
                     _state.streamingContent = full;
                     _updateStreamingMessage(full);
                 },
-                onComplete: async (fullContent) => {
+                onComplete: async (fullContent, usage, actualModel) => {
                     _removeStreamingMessage();
                     _state.isStreaming = false;
                     _updateSendStopButtons();
@@ -1270,11 +1297,12 @@ function _removeStreamingMessage() {
                         await DB.addMessage(_state.userId, {
                             chatId: _state.currentChatId,
                             role: 'assistant',
-                            content: fullContent
+                            content: fullContent,
+                            model: actualModel || _state.settings.currentModel
                         });
                     }
                 },
-                onError: async (error, partialContent) => {
+                onError: async (error, partialContent, actualModel) => {
                     _removeStreamingMessage();
                     _state.isStreaming = false;
                     _updateSendStopButtons();
@@ -1283,7 +1311,8 @@ function _removeStreamingMessage() {
                         await DB.addMessage(_state.userId, {
                             chatId: _state.currentChatId,
                             role: 'assistant',
-                            content: partialContent + '\n\n---\n*Generation interrupted due to error.*'
+                            content: partialContent + '\n\n---\n*Generation interrupted due to error.*',
+                            model: actualModel || _state.settings.currentModel
                         });
                     }
                     _appendErrorMessage(error.message || 'An error occurred.');
@@ -1491,6 +1520,138 @@ function _removeStreamingMessage() {
         _state.settings.currentModel = modelId;
         await _saveSettings({ currentModel: modelId });
         DOM.settingsCurrentModel.value = modelId;
+        _renderFreeModels();
+    }
+
+    // ══════════════════════════════════════════════
+    //  FREE MODEL CATALOG
+    // ══════════════════════════════════════════════
+
+    async function _loadFreeModels(force = false) {
+        if (_state.freeModelsStatus === 'loading') return;
+        if (!force && _state.freeModelsStatus === 'ready') return;
+
+        _state.freeModelsStatus = 'loading';
+        _state.freeModelsError = '';
+        DOM.refreshFreeModels.disabled = true;
+        _renderFreeModels();
+
+        try {
+            const payload = await API.listModels(_state.settings?.apiKey || '');
+            _state.freeModels = FreeModels.normalizeCatalog(payload);
+            _state.freeModelsStatus = 'ready';
+        } catch (error) {
+            console.error('Failed to load free models:', error);
+            _state.freeModels = FreeModels.normalizeCatalog({ data: [] });
+            _state.freeModelsStatus = 'error';
+            _state.freeModelsError = error.message || 'Could not load free models.';
+        } finally {
+            DOM.refreshFreeModels.disabled = false;
+            _renderFreeModels();
+        }
+    }
+
+    function _renderFreeModels() {
+        if (!DOM.freeModelsList || !DOM.freeModelsStatus) return;
+
+        DOM.freeModelsList.innerHTML = '';
+        const models = FreeModels.search(_state.freeModels, _state.freeModelQuery);
+
+        if (_state.freeModelsStatus === 'loading') {
+            DOM.freeModelsStatus.textContent = 'Loading current free models...';
+        } else if (_state.freeModelsStatus === 'error') {
+            DOM.freeModelsStatus.textContent = `${_state.freeModelsError} You can still use the free router or your saved models.`;
+        } else if (_state.freeModelsStatus === 'ready') {
+            DOM.freeModelsStatus.textContent = `${_state.freeModels.length} free options available.`;
+        } else {
+            DOM.freeModelsStatus.textContent = '';
+        }
+
+        if (models.length === 0 && _state.freeModelsStatus !== 'loading') {
+            const empty = document.createElement('p');
+            empty.classList.add('free-models-empty');
+            empty.textContent = 'No free models match your search.';
+            DOM.freeModelsList.appendChild(empty);
+            return;
+        }
+
+        models.forEach(model => DOM.freeModelsList.appendChild(_createFreeModelCard(model)));
+    }
+
+    function _createFreeModelCard(model) {
+        const card = document.createElement('article');
+        card.classList.add('free-model-card');
+        if (model.id === _state.settings?.currentModel) card.classList.add('selected');
+
+        const info = document.createElement('div');
+        info.classList.add('free-model-info');
+
+        const title = document.createElement('div');
+        title.classList.add('free-model-title');
+        title.textContent = model.name;
+
+        const id = document.createElement('div');
+        id.classList.add('free-model-id');
+        id.textContent = model.id;
+
+        const meta = document.createElement('div');
+        meta.classList.add('free-model-meta');
+        const capabilities = [FreeModels.formatContext(model.contextLength)];
+        if (model.inputModalities.includes('image')) capabilities.push('Vision');
+        if (model.isRouter) capabilities.unshift('Recommended');
+        meta.textContent = capabilities.join(' · ');
+
+        info.append(title, id, meta);
+        if (model.description) {
+            const description = document.createElement('p');
+            description.classList.add('free-model-description');
+            description.textContent = model.description;
+            info.appendChild(description);
+        }
+
+        const actions = document.createElement('div');
+        actions.classList.add('free-model-actions');
+
+        const useButton = document.createElement('button');
+        useButton.type = 'button';
+        useButton.className = 'btn btn-sm btn-primary';
+        useButton.textContent = model.id === _state.settings?.currentModel ? 'Selected' : 'Use';
+        useButton.disabled = model.id === _state.settings?.currentModel;
+        useButton.addEventListener('click', () => _selectFreeModel(model));
+
+        const favoriteButton = document.createElement('button');
+        favoriteButton.type = 'button';
+        favoriteButton.className = 'btn btn-sm btn-secondary';
+        const isFavorite = (_state.settings?.favoriteModels || []).some(fav => fav.id === model.id);
+        favoriteButton.textContent = isFavorite ? 'Saved' : 'Favorite';
+        favoriteButton.disabled = isFavorite;
+        favoriteButton.setAttribute('aria-label', `${isFavorite ? 'Saved' : 'Add to favorites'}: ${model.name}`);
+        favoriteButton.addEventListener('click', () => _favoriteFreeModel(model));
+
+        actions.append(useButton, favoriteButton);
+        card.append(info, actions);
+        return card;
+    }
+
+    async function _selectFreeModel(model) {
+        _state.settings.currentModel = model.id;
+        await _saveSettings({ currentModel: model.id });
+        DOM.settingsCurrentModel.value = model.id;
+        _updateModelSelect();
+        _renderFreeModels();
+        showToast(`${model.name} selected`, 'success');
+    }
+
+    async function _favoriteFreeModel(model) {
+        const favs = _state.settings?.favoriteModels || [];
+        if (favs.some(fav => fav.id === model.id)) return;
+        favs.push({ id: model.id, name: model.name });
+        _state.settings.favoriteModels = favs;
+        await _saveSettings({ favoriteModels: favs });
+        _renderFavoriteModels();
+        _updateModelSelect();
+        _renderFreeModels();
+        showToast(`${model.name} added to favorites`, 'success');
     }
 
     // ══════════════════════════════════════════════
@@ -1742,6 +1903,7 @@ function _removeStreamingMessage() {
             const panel = $(`.settings-panel[data-panel="${tab}"]`);
             if (navItem) navItem.classList.add('active');
             if (panel) panel.classList.add('active');
+            if (tab === 'models') _loadFreeModels();
         }
     }
 
@@ -1820,6 +1982,7 @@ function _removeStreamingMessage() {
         await _saveSettings({ favoriteModels: favs });
         _renderFavoriteModels();
         _updateModelSelect();
+        _renderFreeModels();
 
         DOM.newFavModelId.value = '';
         DOM.newFavModelName.value = '';
@@ -1834,6 +1997,7 @@ function _removeStreamingMessage() {
         await _saveSettings({ favoriteModels: favs });
         _renderFavoriteModels();
         _updateModelSelect();
+        _renderFreeModels();
     }
 
     async function _setTheme(theme) {
@@ -2119,6 +2283,10 @@ function cleanup() {
     _state.lastPaginationDoc = null;
     _state.hasMoreMessages = false;
     _state.sidebarOpen = false;
+    _state.freeModels = [];
+    _state.freeModelQuery = '';
+    _state.freeModelsStatus = 'idle';
+    _state.freeModelsError = '';
     // НЕ сбрасываем _state.eventsBound!
 
     if (_state.settingsDebounceTimer) {

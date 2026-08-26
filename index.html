@@ -221,6 +221,17 @@
 
                     <!-- Models Tab -->
                     <div class="settings-panel" data-panel="models">
+                        <div class="free-models-heading">
+                            <div>
+                                <h3>Free Models</h3>
+                                <p class="settings-hint">Choose the automatic router or a specific free OpenRouter model.</p>
+                            </div>
+                            <button class="btn btn-sm btn-secondary" id="refresh-free-models" type="button">Refresh</button>
+                        </div>
+                        <input type="search" id="free-model-search" class="free-model-search" placeholder="Search free models..." autocomplete="off" aria-label="Search free models">
+                        <p id="free-models-status" class="free-models-status" role="status"></p>
+                        <div id="free-models-list" class="free-models-list"></div>
+
                         <h3>Current Model</h3>
                         <div class="form-group">
                             <input type="text" id="settings-current-model" placeholder="e.g. anthropic/claude-sonnet-4">
@@ -413,6 +424,7 @@
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3/build/pdf.min.js"></script>
 
     <script src="js/config.js"></script>
+    <script src="js/free-models.js"></script>
     <script src="js/markdown.js"></script>
     <script src="js/file-handler.js"></script>
     <script src="js/db.js"></script>

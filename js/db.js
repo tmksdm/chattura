@@ -285,6 +285,7 @@ const DB = (() => {
             timestamp: _timestamp(),
             attachments: data.attachments || []
         };
+        if (data.model) message.model = data.model;
         await ref.set(message);
         // Touch chat updatedAt
         await _userRef(userId).collection('chats').doc(data.chatId).update({

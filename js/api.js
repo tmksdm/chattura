@@ -6,6 +6,7 @@
 const API = (() => {
 
     const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
+    const MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models?output_modalities=text&sort=most-popular';
 
     // Currently active AbortController (for stop button)
     let _activeController = null;
@@ -26,6 +27,16 @@ const API = (() => {
             'HTTP-Referer': window.location.href,
             'X-Title': APP_CONFIG.appName
         };
+    }
+
+    async function listModels(apiKey) {
+        if (!apiKey) throw new Error('Save your OpenRouter API key before loading the catalog.');
+        const response = await fetch(MODELS_ENDPOINT, { headers: _buildHeaders(apiKey) });
+        if (!response.ok) {
+            if (response.status === 401) throw new Error('The OpenRouter API key is invalid.');
+            throw new Error(`Could not load models (${response.status}).`);
+        }
+        return response.json();
     }
 
     /**
@@ -176,8 +187,8 @@ const API = (() => {
      * @param {number} [options.maxTokens=4096]
      * @param {number} [options.topP=0.95]
      * @param {function} options.onToken — Callback for each content delta: (token: string, fullContent: string) => void
-     * @param {function} [options.onComplete] — Callback when stream finishes: (fullContent: string, usage: object|null) => void
-     * @param {function} [options.onError] — Callback on error: (error: Error, partialContent: string) => void
+     * @param {function} [options.onComplete] — Callback when stream finishes: (fullContent, usage, actualModel) => void
+     * @param {function} [options.onError] — Callback on error: (error, partialContent, actualModel) => void
      * @returns {AbortController} — The controller that can be used to abort the request
      */
     function streamChat(options) {
@@ -211,6 +222,7 @@ const API = (() => {
 
         let fullContent = '';
         let usage = null;
+        let actualModel = null;
 
         try {
             // Validate required params
@@ -307,6 +319,7 @@ const API = (() => {
 
                         try {
                             const parsed = JSON.parse(data);
+                            if (parsed.model) actualModel = parsed.model;
 
                             // Extract content delta
                             if (parsed.choices && parsed.choices.length > 0) {
@@ -345,6 +358,7 @@ const API = (() => {
                 if (trimmed.startsWith('data: ') && trimmed.slice(6) !== '[DONE]') {
                     try {
                         const parsed = JSON.parse(trimmed.slice(6));
+                        if (parsed.model) actualModel = parsed.model;
                         if (parsed.choices && parsed.choices.length > 0) {
                             const choice = parsed.choices[0];
                             if (choice.delta && choice.delta.content) {
@@ -367,7 +381,7 @@ const API = (() => {
             _clearActiveController(controller);
 
             if (onComplete) {
-                onComplete(fullContent, usage);
+                onComplete(fullContent, usage, actualModel);
             }
 
         } catch (error) {
@@ -376,7 +390,7 @@ const API = (() => {
             if (error.name === 'AbortError') {
                 // Request was intentionally aborted (stop button)
                 if (onComplete) {
-                    onComplete(fullContent, usage);
+                    onComplete(fullContent, usage, actualModel);
                 }
                 return;
             }
@@ -384,7 +398,7 @@ const API = (() => {
             console.error('Stream error:', error);
 
             if (onError) {
-                onError(error, fullContent);
+                onError(error, fullContent, actualModel);
             }
         }
     }
@@ -555,6 +569,7 @@ const API = (() => {
     // ══════════════════════════════════════════════
 
     return {
+        listModels,
         streamChat,
         chat,
         generateTitle,
